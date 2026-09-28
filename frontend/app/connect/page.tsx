@@ -69,6 +69,8 @@ function ConnectFlow() {
 
         // Success!
         sessionStorage.removeItem("pending_qr_token");
+        sessionStorage.setItem("active_patient_id", patientId);
+        sessionStorage.setItem("active_patient_name", patientContext[0].full_name);
         setPatientName(patientContext[0].full_name);
         setStatus("SUCCESS");
 

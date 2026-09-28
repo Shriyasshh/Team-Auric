@@ -1,0 +1,1230 @@
+MEDIVAULT
+Product Requirements Document (PRD)+Software Requirements Specification (SRS)
+Privacy-first medical record management with MST Blockchain-based integrity and access auditing
+
+Document status
+Working specification for the hackathon MVP. Items that were not explicitly fixed in the supplied material are marked as PROPOSED or TBD rather than silently assumed.
+
+Document Item
+Value
+Project
+MediVault
+Document Type
+Combined PRD + SRS
+Version
+1.0
+Date
+28 September 2026
+Primary Blockchain
+MST Blockchain — MST Testnet for hackathon deployment
+Frontend Direction
+Next.js + React + TypeScript + Tailwind CSS
+Cloud Backend Direction
+Supabase
+Application API
+FastAPI where server-side processing is required
+Hackathon Build Target
+Core MVP planned for an 18-hour implementation window inside the 24-hour event
+Project Status
+Specification / pre-implementation
+
+Source basis: user-approved MediVault concept, organizer-provided MST Buildathon Track Guide, and current official documentation checks where available.
+
+1. Executive Summary
+MediVault is a privacy-first medical record management platform intended for patients and doctors. The product concept is to give patients a unified place to manage medical records, while allowing them to control access to those records and verify their integrity. The core system keeps sensitive medical files off-chain and encrypted, while MST Blockchain is used as a trust and audit layer for record integrity proofs and access events.
+The supplied project specification defines the central separation as: off-chain storage for privacy, blockchain for integrity and auditability, and application logic in the web/API layer. The organizer track guide further requires meaningful MST use, MST Testnet deployment, a public GitHub repository, and at least one verifiable MST Testnet transaction. fileciteturn1file0L10-L25
+Core product principle
+MediVault must not be “a normal medical-record app plus a wallet.” MST Blockchain must participate in core product behavior: record integrity proof and/or consent/access audit events must be real on-chain operations.
+
+2. Source Basis, Decision Status & No-Assumption Policy
+2.1 Sources used
+Source
+Use in this specification
+User-approved MediVault project direction
+Defines product concept, roles, workflows, Django/FastAPI-to-be-refined architecture, encryption/hash approach, database entities and demo narrative.
+MST Blockchain Buildathon Official Track Guide (organizer-provided)
+Defines mandatory MST usage, Testnet deployment, GitHub submission, BridgeKey recommendation, on-chain proof requirement, official resource links, judging emphasis and submission requirements.
+Official MST / ecosystem pages checked on 28 Sep 2026
+Used only where a current technical fact could be verified, such as BridgeKey positioning and the published Python SDK.
+Official Supabase / Vercel / Render documentation
+Used to validate current free-tier/deployment notes and limitations.
+
+2.2 Decision labels
+Label
+Meaning
+CONFIRMED
+Explicitly supplied by the user or present in the organizer/project source material.
+PROPOSED
+A technical design recommendation required to make the system implementable, but not yet explicitly approved by the user.
+TBD
+Information required before implementation; no value is invented here.
+OPTIONAL
+Can be implemented only after the core MVP works.
+
+2.3 Decisions still requiring explicit confirmation
+ID
+Decision
+Current status
+Why it matters
+DEC-01
+Exact MST transaction-signing model: browser/BridgeKey signing vs server-side signing for each transaction
+TBD / must follow official MST + BridgeKey integration guidance
+Changes wallet flow, backend responsibilities and security model.
+DEC-02
+Whether record hash is computed over the encrypted file or original file
+PROPOSED: encrypted-file hash
+Defines exactly what verification proves and how the file is processed.
+DEC-03
+Whether every consent event is on-chain or only grants/revocations
+PROPOSED: grant/revoke on-chain; request may stay off-chain
+Affects gas/UX and contract design.
+DEC-04
+Whether hospitals are separate platform entities in MVP
+TBD; not required by the supplied core workflow
+Would add organization onboarding and a new RBAC layer.
+DEC-05
+Exact MST Testnet RPC/network configuration and currently supported SDK methods
+TBD until verified against current official MST docs at build time
+Avoids fabricated network parameters or obsolete SDK calls.
+
+Implementation gate
+Do not start production code from this document until DEC-01, DEC-02 and DEC-03 are confirmed. The rest can be implemented against interfaces and then finalized.
+
+PART I — PRODUCT REQUIREMENTS DOCUMENT (PRD)
+3. Product Overview
+3.1 Product name
+MediVault
+3.2 Product tagline
+Your Medical Records. Your Consent. Verifiable on MST.
+3.3 Product vision
+Create a patient-controlled medical-record experience that improves record portability and consent visibility without exposing sensitive medical documents on a blockchain.
+3.4 Core value proposition
+Patients can organize medical records in one interface.
+Medical records are kept private through off-chain encrypted storage.
+Blockchain provides a verifiable proof layer for record integrity and access/consent events.
+Doctors can request access instead of receiving unrestricted access by default.
+Patients can approve, reject, and revoke access.
+Judges can verify actual MST Testnet activity rather than seeing simulated blockchain data.
+4. Problem Statement
+The project concept identifies medical information as fragmented across hospitals, clinics and diagnostic providers. This creates difficulty for patients who need to collect or share records, and it reduces visibility into who has been allowed to access a record. The concept also identifies a need for a verifiable integrity trail for documents. fileciteturn0file0L17-L43
+4.1 Problem dimensions
+Problem
+MediVault response
+Blockchain role
+Fragmented records
+Unified patient record vault
+Not required directly; supports trust layer
+Difficult sharing
+Patient-driven doctor access requests
+Consent/access events can be anchored on MST
+Limited access visibility
+Access-management and audit screens
+On-chain grant/revoke events provide verifiable audit evidence
+Record modification concern
+Hash-based integrity verification
+MST stores integrity proof for later comparison
+
+5. Product Goals & Non-Goals
+5.1 Goals
+Deliver a working hackathon MVP that judges can interact with.
+Use MST Blockchain as a meaningful part of the core record and consent workflows.
+Keep sensitive medical content off-chain and protected by encryption.
+Enable patient-controlled access to doctors.
+Allow record integrity verification against an on-chain proof.
+Produce a real MST Testnet contract address and verifiable transaction hash.
+Provide a clear architecture and demo narrative that every team member can explain.
+5.2 Non-goals for the hackathon MVP
+Not a production healthcare information system.
+Not a medical diagnosis engine.
+Not a complete hospital information system.
+Not a regulatory/compliance certification project.
+Not a decentralized storage network for raw medical files.
+Not an on-chain repository of diagnoses, reports or prescriptions.
+Not a replacement for established healthcare interoperability infrastructure.
+6. Stakeholders & User Roles
+Role
+Primary needs
+Allowed high-level capabilities
+Patient
+Control records and consent
+Register/login, upload, view, verify, approve/reject requests, revoke access, review audit activity, connect BridgeKey
+Doctor
+Request and view authorized records
+Register/login, find patient, request access, view records after approval, verify integrity
+Admin
+System oversight without default document access
+View user metadata, system/audit activity, operational monitoring
+Hackathon Judge / Demo Viewer
+Verify working product and MST integration
+Use demo link, view blockchain transaction, inspect core workflow
+
+7. User Journeys
+7.1 Patient journey — upload and anchor record
+Patient → Login → Connect BridgeKey → Select record → Secure upload → Encrypt → Store private file → SHA-256 → Register integrity proof on MST → Save transaction hash → Show “Blockchain Registered”
+7.2 Doctor journey — access request
+Doctor → Login → Find patient → Select record → Request Access → Patient receives request → Patient approves → Access state updated → On-chain grant event (subject to DEC-03) → Doctor can view authorized record
+7.3 Patient journey — revoke access
+Patient → Access Management → Select Doctor → Revoke → Permission becomes revoked → On-chain revocation event (subject to DEC-03) → Doctor is blocked by application authorization
+7.4 Verification journey
+Authorized user → Verify record → Generate current hash → Read stored on-chain hash → Compare → MATCH = VERIFIED / MISMATCH = INTEGRITY WARNING
+8. Functional Requirements — Product Level
+ID
+Requirement
+Description
+Priority
+FR-001
+Account registration
+Patient and doctor can create accounts.
+MVP
+FR-002
+Authentication
+Users can securely log in and log out.
+MVP
+FR-003
+Role handling
+System distinguishes Patient, Doctor and Admin roles.
+MVP
+FR-004
+BridgeKey connection
+User can connect BridgeKey for MST wallet interaction.
+MVP / required for intended wallet flow
+FR-005
+Record upload
+Patient can upload supported medical document types.
+MVP
+FR-006
+Record encryption
+Uploaded document is encrypted before durable storage.
+MVP
+FR-007
+Record hashing
+System creates deterministic SHA-256 integrity hash.
+MVP
+FR-008
+MST record proof
+Core record-registration transaction is performed on MST Testnet.
+MVP / mandatory
+FR-009
+Record listing
+Patient can see own records and status.
+MVP
+FR-010
+Doctor search
+Doctor can search/find a patient within the application.
+MVP
+FR-011
+Access request
+Doctor can request access to a record.
+MVP
+FR-012
+Access decision
+Patient can approve or reject a request.
+MVP
+FR-013
+Access revocation
+Patient can revoke approved access.
+MVP
+FR-014
+Authorized record view
+Doctor can view record only when authorization permits.
+MVP
+FR-015
+Integrity verification
+System compares current hash with blockchain proof.
+MVP
+FR-016
+Audit history
+System shows record/access activity and transaction hashes.
+MVP
+FR-017
+MSTScan verification
+User/judge can open a transaction in MSTScan.
+MVP
+FR-018
+Synthetic/demo data only
+Hackathon deployment avoids real patient medical data.
+MVP / safety boundary
+
+9. Non-Functional Product Requirements
+ID
+Area
+Requirement
+Priority
+NFR-001
+Security
+Secrets, private keys and encryption keys must not be committed or exposed to client-side code.
+Critical
+NFR-002
+Privacy
+Sensitive medical content must remain off-chain.
+Critical
+NFR-003
+Authorization
+Database/API authorization must not rely solely on UI checks.
+Critical
+NFR-004
+Availability
+Application should remain usable for the hackathon demo with graceful handling of external service delays.
+High
+NFR-005
+Performance
+Normal dashboard actions should return promptly; blockchain actions may display explicit pending/confirmed states.
+High
+NFR-006
+Scalability
+Architecture must separate data, secure processing and blockchain so components can be scaled independently.
+Medium
+NFR-007
+Maintainability
+Use typed interfaces, modular services and documented APIs.
+High
+NFR-008
+Auditability
+Core blockchain-related actions must store transaction references.
+High
+NFR-009
+Usability
+A judge should understand the primary workflow without training.
+High
+NFR-010
+Portability
+All required environment configuration must be documented.
+High
+
+10. Feature Scope
+10.1 MVP features
+Patient and doctor authentication
+BridgeKey connection
+Private encrypted medical-record storage
+Record hash creation
+MST Testnet record integrity registration
+Doctor access requests
+Patient approve/reject
+Patient revoke
+Authorized record viewing
+Blockchain audit display
+Integrity verification
+MSTScan transaction proof
+10.2 Optional features
+QR verification page
+Supabase Realtime notifications
+AI document classification (classification only; no diagnosis)
+Leaflet-based healthcare-provider locator
+Email notifications
+10.3 Future scope
+Healthcare interoperability standards integration
+Emergency access workflow
+Organization/hospital onboarding
+Advanced consent scopes
+Hardware-backed key management
+Zero-knowledge or privacy-preserving proofs
+Mobile application
+Production-grade compliance and security controls
+PART II — SOFTWARE REQUIREMENTS SPECIFICATION (SRS)
+11. System Architecture
+The technical architecture replaces the earlier Django-centered design with the user-approved modern stack: Next.js/React for the application UI, Supabase for managed Auth/PostgreSQL/Storage/RLS, FastAPI for security-sensitive server-side processing where required, and MST Blockchain for the on-chain trust layer.
+Architecture boundary
+The system is intentionally split into four concerns: presentation, managed application data, secure processing, and blockchain trust/audit. This reduces unnecessary duplication while keeping security-sensitive operations server-side.
+
+USER  │  ▼NEXT.JS / REACT / TYPESCRIPT  │  ├──────────────► SUPABASE  │                ├─ Auth  │                ├─ PostgreSQL  │                ├─ RLS  │                ├─ Private Storage  │                └─ Realtime (optional)  │  └──────────────► FASTAPI                   ├─ File validation                   ├─ AES-GCM processing                   ├─ SHA-256 hashing                   ├─ Permission/business rules                   └─ MST integration where server-side operations are requiredBRIDGEKEY ──► user-authorized MST transactionsMST TESTNET  └─ MediVault smart contract       ├─ Record integrity proofs       ├─ Access grants       └─ Access revocations
+11.1 Architecture responsibilities
+Component
+Responsibilities
+Must NOT do
+Next.js
+Pages, layouts, user interactions, dashboard views, client-side session UX, wallet interaction.
+Hold private keys or trusted authorization logic.
+Supabase Auth
+Authentication, sessions, JWT-backed identity.
+Store raw medical documents as public assets.
+Supabase PostgreSQL
+Profiles, record metadata, access state, audit metadata.
+Be treated as the only source of truth for blockchain proof.
+Supabase Storage
+Private storage of encrypted document objects.
+Expose raw medical documents publicly.
+Supabase RLS
+Row-level database authorization.
+Replace server-side authorization checks for blockchain actions.
+FastAPI
+File security, encryption, hashing, controlled APIs and secure processing.
+Become a duplicate general-purpose backend for all CRUD.
+BridgeKey
+Wallet connection and user-authorized signing according to supported integration.
+Reveal seed phrases or private keys to the application.
+MST smart contract
+Record proof and consent/access event state.
+Store medical document content.
+MSTScan
+Public verification of real Testnet transactions.
+Act as application storage.
+
+12. Detailed Technology Stack
+Technology
+Role
+Status
+Notes
+Next.js
+Web application framework
+Core
+Open-source; current docs support App Router and Pages Router.
+React
+UI component model
+Core
+Used through Next.js.
+TypeScript
+Static typing
+Core
+Used across frontend and Web3 integration.
+Tailwind CSS
+Styling
+Core
+Rapid consistent UI implementation.
+shadcn/ui
+UI components
+Recommended
+Open-source/MIT; components are added to the app source.
+Lucide React
+Icons
+Recommended
+Consistent visual language.
+React Hook Form
+Form state
+Recommended
+Simplifies registration/upload/access forms.
+Zod
+Validation/schema checks
+Recommended
+Frontend validation and API-boundary validation.
+TanStack Query
+Remote data state
+Recommended
+Useful for server data caching/invalidation.
+Supabase Auth
+Authentication
+Core
+Managed auth.
+Supabase PostgreSQL
+Database
+Core
+Managed relational data.
+Supabase Storage
+Private file storage
+Core
+Encrypted file object storage.
+Supabase RLS
+Database authorization
+Core
+Policy-based data isolation.
+FastAPI
+Secure API/service layer
+Core for secure processing
+Used only where server-side operations are required.
+Python cryptography library
+Encryption
+Core
+AES-GCM or equivalent authenticated encryption implementation.
+SHA-256
+Integrity hashing
+Core
+Deterministic file integrity proof.
+Solidity
+Smart contract
+Core
+MediVault contract.
+MST TypeScript SDK
+MST interaction
+Use where documented/current
+Official organizer-provided resource.
+MST Python SDK
+Server-side MST interaction
+Optional
+Use only if FastAPI requires it; current PyPI package is published by MST and built on web3.py/eth-account.
+MST VibeKit
+Rapid MST scaffolding
+Recommended only where useful
+Use according to official MST documentation; do not depend on it if it creates unnecessary abstraction.
+Hardhat
+Smart-contract development/test/deploy
+Core/subject to current MST workflow
+Use if compatible with documented MST deployment flow.
+OpenZeppelin Contracts
+Contract security primitives
+Recommended
+Use only where appropriate.
+wagmi + viem
+Frontend EVM interaction
+Recommended
+Use if compatible with the documented MST/BridgeKey browser flow.
+BridgeKey
+MST wallet
+Strongly recommended by organizer
+Official MST wallet recommendation.
+MSTScan
+Transaction verification
+Core
+Used for proof in demo/submission.
+Leaflet / React-Leaflet
+Map UI
+Optional
+Only for a healthcare-provider locator feature.
+Vercel
+Frontend deployment
+Recommended
+Free Hobby plan exists; usage limits apply.
+Render
+FastAPI deployment option
+Recommended for demo
+Free web services have cold starts and ephemeral local files; store files in Supabase.
+
+12.1 Current free-tier / licensing notes verified
+Supabase currently provides a Free plan with two free projects per organization, 500 MB database size per project, 1 GB storage, 50,000 monthly active users, 5 GB egress, and other quotas; free storage has a 50 MB maximum per-file limit. These are quota-based offerings, not unlimited production capacity. citeturn466770search4turn887002search0
+Vercel currently lists a free Hobby plan aimed at personal projects and small-scale applications. citeturn728658search3
+Render currently offers free web services suitable for testing/hobby use, but free services spin down after 15 minutes of inactivity, take about a minute to wake, and have ephemeral local files. Therefore MediVault must not rely on Render local disk for medical-record storage. citeturn887002search1
+The current MST Python SDK on PyPI is MIT licensed, requires Python >=3.9, and documents interaction through web3.py/eth-account; its published package supports choosing mainnet or testnet at runtime. citeturn466770search1
+BridgeKey currently presents itself as a non-custodial wallet with native MST support. The organizer guide strongly recommends BridgeKey for wallet connection, network switching and smart-contract signing. citeturn466770search8 fileciteturn1file0L29-L43
+13. Authentication & Authorization
+13.1 Identity model
+Supabase Auth User      │      ▼profiles table      ├─ full_name      ├─ role      └─ wallet_address
+13.2 Role-based access
+Action
+Patient
+Doctor
+Admin
+View own records
+Yes
+No
+Metadata only by default
+Upload record
+Yes
+No
+No
+Request access
+No
+Yes
+No
+Approve/reject request
+Yes
+No
+No
+Revoke access
+Yes
+No
+No
+View authorized record
+Own records
+Yes, only after authorization
+No by default
+View audit metadata
+Own scope
+Own authorized scope
+Yes, system metadata
+
+Security rule
+Frontend role checks are for UX only. Server/API and database RLS policies must enforce authorization.
+
+14. Medical Record Data Model
+Entity
+Key fields
+Purpose
+profiles
+id, full_name, role, wallet_address, created_at
+Application identity and role mapping
+medical_records
+id, record_id, patient_id, title, record_type, original_filename, encrypted_storage_path, file_hash, blockchain_record_id, blockchain_tx_hash, timestamps
+Medical record metadata + proof references
+access_requests
+id, record_id, patient_id, doctor_id, status, requested_at, responded_at
+Request workflow state
+access_permissions
+id, record_id, patient_id, doctor_id, status, granted_at, revoked_at
+Current access decision state
+audit_logs
+id, actor_id, action, record_id, transaction_hash, metadata, created_at
+Application-side operational audit trail
+
+15. Storage and Privacy Model
+15.1 What stays off-chain
+Encrypted medical document objects
+Medical report content
+Prescription text
+X-ray/image content
+Sensitive patient data
+Any large binary file
+15.2 What may be stored on MST
+Record identifier or pseudonymous identifier
+Cryptographic record hash
+Wallet/address reference where needed
+Timestamp/event information
+Access grant/revocation state or events
+Privacy boundary
+The blockchain must never become a public database of medical records. It is a proof/audit layer, not the document store.
+
+16. Encryption and Integrity Specification
+16.1 Encryption
+The intended MVP uses authenticated encryption such as AES-GCM. The exact key lifecycle is still a design decision that must be finalized before implementation: how the encryption key is generated, where it is stored, how it is associated with the patient, and how authorized doctors receive decryption capability without exposing a master key.
+Medical file   ↓AES-GCM encryption   ↓Encrypted object   ↓Private Supabase Storage
+16.2 Hashing
+The current proposal is to hash the encrypted file using SHA-256, because that makes the integrity check tied to the exact stored encrypted object. This remains DEC-02 until confirmed.
+Encrypted file   ↓SHA-256   ↓recordHash   ↓MST smart contract
+16.3 Verification semantics
+A successful comparison means the file presented for verification matches the hash registered on-chain. It does not prove the truthfulness, medical correctness or clinical interpretation of the document.
+17. Blockchain Specification
+17.1 Smart-contract responsibilities
+Function
+Purpose
+Inputs (conceptual)
+Output
+registerRecord
+Register integrity proof
+recordId, recordHash, patient wallet/reference
+Transaction receipt / event
+grantAccess
+Record consent/access grant
+recordId, doctor wallet
+Transaction receipt / event
+revokeAccess
+Record revocation
+recordId, doctor wallet
+Transaction receipt / event
+verifyRecord
+Read/compare registered proof
+recordId, hash
+Boolean/status
+hasAccess
+Read permission state
+recordId, doctor wallet
+Boolean
+
+17.2 Contract events
+Event
+Purpose
+RecordRegistered
+Proof that a record registration transaction occurred
+AccessGranted
+Proof that access was granted to an address
+AccessRevoked
+Proof that access was revoked from an address
+
+17.3 Wallet and signer model
+The organizer guide strongly recommends BridgeKey for wallet connection, network switching and smart-contract signing. fileciteturn1file0L29-L43 The exact allocation of transaction signing between the browser wallet and FastAPI is not treated as final until the current official MST/BridgeKey developer workflow is validated. The secure default for user-consent actions is to have the patient explicitly authorize the transaction from their own wallet, subject to what the official integration supports.
+17.4 MST requirements for submission
+MST Testnet deployment is mandatory for MST prize eligibility.
+Submission must include the MST Testnet contract address.
+Submission must include at least one verifiable MST Testnet transaction hash.
+Public GitHub repository must include source code and MST integration details.
+Working product/demo is strongly preferred.
+These requirements are explicitly stated in the organizer-provided track guide. fileciteturn1file0L10-L25
+18. Detailed Workflows
+18.1 Upload workflow
+Patient authenticates with Supabase Auth.
+Patient connects BridgeKey if required for the transaction path.
+Patient selects a synthetic medical document.
+Next.js validates basic client-side constraints.
+FastAPI validates file type/size and authorization.
+FastAPI encrypts the file.
+Encrypted object is stored in private Supabase Storage.
+SHA-256 hash is calculated according to the confirmed hash policy.
+Record metadata is written to Supabase.
+MST transaction registers the record proof.
+Transaction hash is stored in Supabase and displayed to the user.
+User can open the real MSTScan transaction.
+18.2 Doctor access request workflow
+Doctor → /access/request → access_requests(PENDING) → Patient dashboardPatient → Approve → permission state APPROVED → on-chain grant (if enabled) → audit logPatient → Reject → permission state REJECTED → audit log
+18.3 Access revocation workflow
+Patient → Revoke → application permission REVOKED → on-chain AccessRevoked event (if enabled) → audit log → Doctor requests become unauthorized
+18.4 Verification workflow
+User selects record → retrieve authorized encrypted object → SHA-256(current object) → read recorded hash → compare → VERIFIED or INTEGRITY WARNING
+19. API Specification
+19.1 FastAPI endpoints
+Method
+Endpoint
+Purpose
+Auth
+GET
+/api/health
+Service health check
+Public
+POST
+/api/records/upload
+Validate/encrypt/store/anchor record
+Patient
+GET
+/api/records
+List records according to role
+Authenticated
+GET
+/api/records/{record_id}
+Get authorized record metadata
+Authorized user
+GET
+/api/records/{record_id}/verify
+Verify current hash against blockchain proof
+Authorized user
+POST
+/api/access/request
+Create doctor access request
+Doctor
+GET
+/api/access/requests
+List relevant requests
+Authenticated
+POST
+/api/access/{request_id}/approve
+Approve request
+Patient owner
+POST
+/api/access/{request_id}/reject
+Reject request
+Patient owner
+POST
+/api/access/{request_id}/revoke
+Revoke approved access
+Patient owner
+GET
+/api/audit/{record_id}
+Read audit activity
+Authorized user/admin metadata scope
+
+19.2 API principles
+Use Pydantic models for request/response validation.
+Return explicit HTTP status codes and machine-readable error messages.
+Never accept a patient_id/doctor_id from the frontend as sufficient authorization proof.
+Derive the authenticated user from the verified Supabase session/JWT.
+Do not expose storage object URLs unless the current user is authorized.
+20. Frontend Specification
+20.1 Page map
+Route
+Purpose
+Primary role
+/login
+Authentication
+All
+/register
+Account creation
+Patient/Doctor
+/patient/dashboard
+Summary
+Patient
+/patient/records
+Record list
+Patient
+/patient/upload
+Upload record
+Patient
+/patient/access
+Requests and permissions
+Patient
+/patient/audit
+Blockchain/application activity
+Patient
+/doctor/dashboard
+Summary
+Doctor
+/doctor/patients
+Patient search
+Doctor
+/doctor/requests
+Access requests
+Doctor
+/doctor/records
+Authorized records
+Doctor
+/verify/{record_id}
+Integrity verification
+Authorized / public-only metadata as designed
+/admin/dashboard
+Operational dashboard
+Admin
+
+20.2 UI design requirements
+Healthcare-oriented, clean visual language.
+Responsive layout for laptop/mobile-sized screens.
+Clear “Verified / Integrity Warning / Pending / Approved / Revoked” states.
+Blockchain actions should show pending, confirmed and failed states.
+Transaction hashes should be copyable.
+MSTScan link should be obvious in the blockchain activity UI.
+Avoid clutter; the live-demo workflow should be discoverable in a few clicks.
+21. Data Flow & Sequence
+21.1 Record registration data flow
+Browser  │ file  ▼FastAPI  │ validate + encrypt + hash  ├──────────────► Supabase Storage (private encrypted object)  │  ├──────────────► Supabase DB (metadata + hash + tx reference)  │  └──────────────► MST (record proof transaction)                         │                         ▼                    MST Testnet
+21.2 Consent/access data flow
+Doctor Browser → FastAPI/Supabase → access_requests                                  │                                  ▼                           Patient Dashboard                                  │ approve                                  ▼                       on-chain access event                                  │                                  ▼                         permission = APPROVED
+22. Security & Threat Model
+Threat
+Risk
+Primary control
+Residual note
+Unauthorized record access
+High
+Supabase RLS + FastAPI authorization + private storage
+Requires correct policies and server checks.
+Leaked encryption key
+Critical
+Secret management + strict server-side handling
+Key lifecycle must be finalized.
+Private key exposure
+Critical
+BridgeKey/user wallet; never send seed/private key to backend
+Implementation must use documented BridgeKey flow.
+Public storage bucket
+Critical
+Private Supabase bucket + RLS
+Must be verified before demo.
+File tampering
+High
+SHA-256 + MST proof
+Proof covers only what was hashed.
+Fake blockchain data
+Critical
+Use only real MST Testnet deployment/transaction
+Official guide warns against misleading deployment/transaction data. fileciteturn1file0L114-L119
+Frontend-only authorization
+High
+RLS + FastAPI checks
+Test negative cases explicitly.
+Oversized/unsafe uploads
+Medium
+MIME/type + size validation
+Do not rely only on extension.
+Service outage
+Medium
+Graceful pending/error state + externalized storage
+MST/Supabase are external dependencies.
+
+23. Error Handling Requirements
+Situation
+UI behavior
+Backend behavior
+Invalid login
+Show concise authentication error
+Return auth error; do not leak account details
+Invalid file type/size
+Show validation message
+Reject before encryption/storage
+Encryption failure
+Show retry-safe error
+Log non-sensitive error details
+Storage failure
+Show upload failed / retry
+Do not create incomplete blockchain proof
+Blockchain transaction rejected
+Show “Transaction rejected” and preserve safe DB state
+Do not mark record as blockchain-registered
+Blockchain pending
+Show “Pending confirmation”
+Poll/await according to SDK workflow
+Hash mismatch
+Show integrity warning
+Do not overwrite the recorded proof automatically
+Unauthorized record access
+Show access denied
+Return 401/403 as appropriate
+
+24. Deployment Architecture
+GitHub  ├── frontend/ → Vercel  ├── backend/  → Render (or another verified free-capable host)  └── blockchain/ → deployed to MST TestnetSupabase  ├── Auth  ├── PostgreSQL  └── private StorageMSTScan  └── public transaction verification
+24.1 Deployment constraints
+Render free web services may sleep; the frontend must surface backend wake-up delays gracefully. citeturn887002search1
+Do not store uploaded files or SQLite data on Render local disk because the filesystem is ephemeral. citeturn887002search1
+Use Supabase Storage for persistent encrypted document objects.
+Do not put blockchain private keys in the Next.js public bundle.
+25. Repository / Source Structure
+MediVault/├── frontend/│   ├── app/│   ├── components/│   ├── lib/│   ├── hooks/│   ├── types/│   └── public/│├── backend/│   ├── app/│   │   ├── main.py│   │   ├── api/│   │   ├── schemas/│   │   ├── services/│   │   │   ├── encryption.py│   │   │   ├── hashing.py│   │   │   ├── storage.py│   │   │   ├── permissions.py│   │   │   └── blockchain.py│   │   └── utils/│   └── tests/│├── blockchain/│   ├── contracts/MediVault.sol│   ├── scripts/│   └── test/│├── supabase/│   ├── migrations/│   └── seed.sql│├── docs/│   ├── requirements.md│   ├── architecture.md│   ├── database.md│   ├── blockchain.md│   ├── security.md│   ├── api.md│   ├── deployment.md│   └── demo-script.md│├── README.md├── .env.example└── .gitignore
+26. Environment Variables
+Variable
+Component
+Sensitive?
+Purpose
+NEXT_PUBLIC_SUPABASE_URL
+Frontend
+No
+Supabase project URL
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+Frontend
+Not treated as secret; protect by RLS
+Client Supabase access
+SUPABASE_SERVICE_ROLE_KEY
+Backend only
+YES
+Privileged operations if actually needed; minimize usage
+MST_RPC_URL
+Backend/contract tooling
+No/low sensitivity
+MST network endpoint if required by selected integration
+CONTRACT_ADDRESS
+Frontend/backend
+No
+Deployed MediVault contract
+ENCRYPTION_KEY
+Backend only
+YES
+Encryption key material; exact lifecycle TBD
+BLOCKCHAIN_PRIVATE_KEY
+Server only if server-side signing is approved
+YES
+Only if official workflow requires backend signing; otherwise avoid
+NEXT_PUBLIC_MST_*
+Frontend
+Depends
+Only configuration that is safe to expose
+
+Secret policy
+The final .env file must never be committed. Commit only .env.example with empty placeholders. The organizer guide permits AI tools but requires teams to understand submitted code; secrets must be handled separately from generated source.
+
+27. Testing Strategy
+27.1 Test layers
+Layer
+Tests
+Unit
+Encryption/decryption, hash stability, validation helpers, pure permission rules
+API
+Auth context, record upload, access control, verification, error paths
+Database/RLS
+Patient isolation, doctor authorization, denied paths
+Smart contract
+Register, grant, revoke, ownership restrictions, event emission
+Integration
+Next.js → FastAPI/Supabase → MST
+E2E
+Full judge demo workflow
+
+27.2 Mandatory negative tests
+Patient A cannot read Patient B records.
+Doctor cannot read an unauthorized record.
+Doctor cannot approve access on behalf of a patient.
+Revoked doctor cannot use the application to retrieve the record.
+Modified file does not verify against original MST hash.
+Rejected blockchain transaction is not marked as confirmed.
+Invalid uploads are rejected.
+Secrets are not exposed in client bundle or GitHub.
+28. Hackathon Execution Roadmap
+Phase
+Target time
+Deliverable
+Exit criteria
+0 — Requirements
+0–1 h
+Repo + confirmed architecture decisions
+DEC-01/02/03 resolved
+1 — Toolchain
+1–2 h
+Next.js, Supabase, FastAPI, MST wallet/tooling ready
+All local health checks pass
+2 — Supabase
+2–4 h
+Auth, schema, RLS, private bucket
+Isolation tests pass
+3 — Frontend shell
+3–6 h
+Login, dashboards, records UI
+Navigation and auth work
+4 — Secure record service
+5–8 h
+Upload, encryption, hash, storage
+Synthetic file can round-trip
+5 — Smart contract
+6–9 h
+Contract + tests
+Local contract tests pass
+6 — MST Testnet
+8–11 h
+Deployed contract + real tx
+MSTScan shows verifiable tx
+7 — Access workflow
+10–13 h
+Request/approve/revoke
+End-to-end permission flow works
+8 — Verification
+12–14 h
+Hash verification
+Match/mismatch tests pass
+9 — Polish
+14–16 h
+Visual polish + audit screen
+Demo-ready UI
+10 — Docs/PPT/demo
+16–18 h
+README, PRD/SRS, PPT, demo video/script
+Submission checklist complete
+
+29. Presentation / PPT Requirements
+Slide
+Title
+Required content
+1
+MediVault
+Name, tagline, team, hackathon
+2
+Problem
+Fragmented records, sharing/control challenges, integrity/audit need
+3
+Users & Use Case
+Patient + Doctor flow
+4
+Solution
+Patient-controlled encrypted vault
+5
+Why MST Blockchain?
+Explain integrity proof and access/consent events; not just wallet usage
+6
+Architecture
+Next.js → Supabase/FastAPI → MST
+7
+Privacy & Security
+Encryption, private storage, RLS, no medical content on-chain
+8
+Core Workflow
+Upload → encrypt → hash → MST → access → revoke → verify
+9
+MST Proof
+Actual contract address + real transaction hash + MSTScan screenshot/link
+10
+Technology Stack
+Frontend/backend/blockchain/deployment
+11
+Results / Demo
+Working screens and verification result
+12
+Future Scope
+Interop, emergency access, ZK, mobile, hospital integration
+
+30. Live Demo Script
+Open MediVault and explain the problem in one sentence.
+Log in as a patient.
+Connect BridgeKey.
+Upload a synthetic blood report PDF.
+Show the encrypted-storage/hash workflow result.
+Show the real MST transaction hash and open MSTScan.
+Switch/login as doctor and search the demo patient.
+Request access to the record.
+Return to patient and approve access.
+Show access-granted activity / transaction if enabled.
+Open the authorized record as doctor.
+Revoke access as patient.
+Show doctor is denied afterward.
+Verify the record and show “VERIFIED”.
+Optionally demonstrate a controlled file modification and show “INTEGRITY WARNING”.
+31. Judge Q&A Reference
+Question
+Answer
+Why blockchain?
+MediVault uses MST as a trust/audit layer for integrity proofs and consent/access events. The medical content remains encrypted off-chain.
+Why not just use PostgreSQL?
+PostgreSQL is still used for application data. MST adds an independently verifiable on-chain proof/event layer for the specific trust requirements.
+Why not store files on-chain?
+Medical files are sensitive and potentially large. Keeping them off-chain avoids exposing sensitive content and avoids turning the blockchain into a file store.
+What does hash verification prove?
+It proves that the compared object matches the hash registered on-chain. It does not prove medical truth or diagnosis accuracy.
+Why Supabase?
+It provides managed Auth, Postgres, Storage and RLS in one platform, reducing infrastructure complexity for a hackathon MVP.
+Why FastAPI?
+Only for server-side secure processing such as encryption, hashing, validation and selected blockchain services; it is not intended to duplicate Supabase CRUD.
+Why BridgeKey?
+It is the official wallet recommended by the organizer for MST wallet connection, network switching and contract signing.
+What is on-chain?
+Only minimal proof/state such as record identifiers/hashes, wallet references where needed, timestamps and access events.
+Is MediVault production-ready?
+No. It is a hackathon MVP. Production use would require additional security, key management, regulatory, interoperability and operational controls.
+
+32. Submission Checklist
+Item
+Required?
+Status field
+Public GitHub repository
+Yes
+[ ]
+Full source code
+Yes
+[ ]
+README with MST integration
+Yes
+[ ]
+MST Testnet contract address
+Yes
+[ ]
+At least one verifiable MST Testnet transaction hash
+Yes
+[ ]
+Working application/demo link
+Strongly preferred
+[ ]
+Demo video
+Required in final submission form
+[ ]
+Final submission form completed
+Required
+[ ]
+No fake/misleading blockchain data
+Critical
+[ ]
+No real patient data
+Required safety boundary
+[ ]
+
+The organizer guide states that the final submission form is compulsory and lists GitHub Repository, Testnet Contract Address, Transaction Hash, Demo Link and Demo Video among the submission items. fileciteturn1file0L133-L139
+33. Risks, Constraints & Mitigations
+Risk/constraint
+Impact
+Mitigation
+MST SDK/API changes
+High
+Verify current official docs at implementation time; isolate MST adapter code.
+BridgeKey browser integration uncertainty
+High
+Validate supported integration before finalizing signer flow.
+Free-tier storage quota
+Medium
+Use small synthetic demo files; keep MVP document size modest; document quota.
+FastAPI cold start on free hosting
+Medium
+Warm service before demo or deploy closer to the final presentation window; keep health endpoint.
+Encryption key design incomplete
+Critical
+Resolve key lifecycle before storing any sensitive test data; use synthetic data for demo.
+Blockchain transaction latency/rejection
+Medium
+Show pending state, retain receipt/tx hash only after confirmation.
+Overbuilding
+High
+Freeze MVP features before optional work.
+
+34. Scalability Plan
+The MVP architecture is designed so each major layer can evolve independently. Supabase/PostgreSQL can scale database resources; storage can move to a higher-capacity object-storage configuration; FastAPI can be replicated behind a load balancer; Next.js can remain independently deployed; and MST transaction volume can be handled by a dedicated blockchain service/queue when the product grows.
+Current MVP
+Future scaling direction
+Supabase PostgreSQL
+Larger compute/storage, read replicas where appropriate
+Supabase Storage
+Higher-capacity plan or compatible object-storage architecture
+Single FastAPI service
+Multiple stateless instances behind a load balancer
+Direct user-triggered blockchain writes
+Queue/indexer/event-processing architecture where scale requires it
+Simple role model
+Organization/hospital RBAC and delegated administration
+Single environment
+Separate development, staging and production environments
+
+35. Limitations
+The hackathon MVP is not a production healthcare system.
+Free-tier hosting is quota- and availability-limited.
+Document encryption key management is a critical area requiring final design before production.
+The blockchain proof only covers what is actually hashed and recorded.
+The system does not establish the medical correctness of a document.
+Healthcare interoperability is outside the initial MVP unless explicitly added.
+BridgeKey/MST SDK capabilities must be validated against current official documentation at implementation time.
+36. Definition of Done
+A patient can log in and reach the dashboard.
+A patient can connect BridgeKey using the supported MST flow.
+A synthetic medical file can be securely processed and stored privately.
+The file produces a hash.
+A real MST Testnet transaction anchors the record proof.
+The deployed contract address is recorded.
+The transaction hash is verifiable on MSTScan.
+A doctor can request access.
+The patient can approve/reject.
+The patient can revoke.
+The doctor is blocked after revocation.
+Record verification can return both match and mismatch outcomes.
+RLS/authorization negative tests pass.
+No private keys/secrets appear in the source or frontend bundle.
+README, architecture, PPT and demo script match the actual implementation.
+37. Appendix A — Official MST Resources Used by the Project
+Resource
+Location
+BridgeKey Wallet Extension
+https://chromewebstore.google.com/detail/bridgekey/bfjojdcfenehemjgjlepdjomkpginlkg
+MST Testnet Faucet
+https://faucet.masterstroke.academy
+MST TypeScript SDK
+https://www.npmjs.com/package/@mstblockchain/mst-sdk
+MST Python SDK
+https://pypi.org/project/mst-sdk-python/
+MST VibeKit SDK
+https://www.npmjs.com/package/@mstblockchain/mst-vibe-kit
+MST MCP Endpoint
+https://mcp.mstblockchain.com/sse
+Official MST Documentation
+https://docs.mstblockchain.com
+MSTScan Explorer
+https://mstscan.com
+BridgeKey Website
+https://bridgekey.io
+Organizer video tutorials
+Organizer-provided Google Drive folder from the track guide
+
+38. Appendix B — Requirements Traceability Matrix
+Requirement
+Mapped concept
+Source/justification
+Implementation note
+FR-004
+BridgeKey connection
+MST track guide strongly recommends BridgeKey integration.
+Affects wallet/signer UX.
+FR-008
+MST record proof
+Mandatory meaningful MST use + Testnet deployment.
+Core hackathon eligibility.
+FR-015
+Integrity verification
+MediVault concept centers record hash comparison.
+Core demo feature.
+FR-016
+Audit history
+MediVault concept specifies access/audit activity.
+Core trust narrative.
+FR-017
+MSTScan proof
+Organizer expects verifiable transaction.
+Submission/demo evidence.
+NFR-002
+Privacy
+Medical files remain off-chain.
+Architecture/security boundary.
+NFR-003
+Authorization
+Patient-controlled access.
+Supabase RLS + FastAPI.
+NFR-008
+Auditability
+On-chain events + stored tx references.
+MST integration.
+
+39. Appendix C — Final Open Questions for Team Confirmation
+Question
+Current proposed answer
+Confirm?
+What exact MST/BridgeKey browser transaction-signing API will be used?
+Use the currently documented official integration.
+[ ]
+Will recordHash be SHA-256 of the encrypted file?
+Yes, proposed.
+[ ]
+Which events must be on-chain?
+RecordRegistered + AccessGranted + AccessRevoked, proposed.
+[ ]
+Is doctor identity verified by an institution in MVP?
+Not specified; leave out unless confirmed.
+[ ]
+Are hospital organizations modeled in MVP?
+Not specified; leave out unless confirmed.
+[ ]
+Will the project use QR verification in MVP?
+Optional.
+[ ]
+Will AI classification be included?
+Optional, only after core workflow works.
+[ ]
+
+40. References & Current Verification Notes
+Organizer-provided “MST Blockchain Buildathon — Official Track Guide”, 8 pages, supplied by the user. Key sections used: Track Requirements (p.1), BridgeKey/working product (p.2), Developer Resources (pp.4–6), judging/originality (p.6), submission requirements (p.8).
+Next.js official documentation: https://nextjs.org/docs — current documentation describes Next.js as a React framework for building full-stack web applications and documents both App Router and Pages Router. citeturn466770search0
+Supabase pricing/billing documentation: https://supabase.com/pricing and https://supabase.com/docs/guides/platform/billing-on-supabase — current free-plan quotas and scaling options. citeturn466770search4turn466770search6
+Supabase Storage limits: https://supabase.com/docs/guides/storage/uploads/file-limits — current Free-plan per-file limit is 50 MB. citeturn887002search0
+Vercel Hobby plan: https://vercel.com/docs/plans/hobby — current free Hobby plan details. citeturn728658search3
+Render free deployment documentation: https://render.com/docs/free — current free-service limitations including spin-down and ephemeral filesystem. citeturn887002search1
+MST Python SDK: https://pypi.org/project/mst-sdk-python/ — current 1.0.1 release metadata, MIT license, Python >=3.9, web3.py/eth-account based. citeturn466770search1
+BridgeKey official website: https://bridgekey.io — current description of non-custodial wallet and native MST support. citeturn466770search8
+Document completion note
+This PRD+SRS deliberately separates confirmed requirements from proposed implementation decisions. Before the first coding phase, resolve the open questions in Appendix C—especially the exact BridgeKey/MST signing flow, hash policy, and on-chain event scope. No real patient data should be used for the hackathon demo.

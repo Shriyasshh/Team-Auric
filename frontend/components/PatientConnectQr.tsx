@@ -80,6 +80,24 @@ export default function PatientConnectQr() {
     };
   }, []);
 
+  const getSafeQrUrl = (token: string) => {
+    let base = process.env.NEXT_PUBLIC_APP_URL;
+    if (!base) {
+      return `${window.location.origin}/connect?token=${token}`;
+    }
+    base = base.trim();
+    if (!base.startsWith("http://") && !base.startsWith("https://")) {
+      base = "https://" + base;
+    }
+    try {
+      const url = new URL("/connect", base);
+      url.searchParams.set("token", token);
+      return url.toString();
+    } catch {
+      return `${window.location.origin}/connect?token=${token}`;
+    }
+  };
+
   return (
     <div className="p-6 border rounded-lg bg-card shadow-sm flex flex-col items-center justify-center text-center space-y-4">
       {status === "READY" && (
@@ -107,7 +125,10 @@ export default function PatientConnectQr() {
           <h2 className="text-xl font-semibold">Scan to Connect</h2>
           <p className="text-sm text-slate-500">Scan this QR with the doctor&apos;s MediVault account</p>
           <div className="p-4 bg-white rounded-xl shadow-inner border inline-block">
-            <QRCodeSVG value={`medivault://connect?token=${token}`} size={200} />
+            <QRCodeSVG
+              value={getSafeQrUrl(token)}
+              size={200}
+            />
           </div>
           <p className="font-mono text-lg font-medium text-red-500">Expires in {timeLeft}</p>
           <button 

@@ -1,9 +1,9 @@
 "use client";
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
-export default function Register() {
+function RegisterForm() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -11,6 +11,8 @@ export default function Register() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectUrl = searchParams.get("redirect");
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,11 +46,11 @@ export default function Register() {
     }
 
     if (data.session) {
-      if (role === "PATIENT") {
-        router.push("/patient/dashboard");
-      } else {
-        router.push("/doctor/dashboard");
+      let finalTarget = role === "PATIENT" ? "/patient/dashboard" : "/doctor/dashboard";
+      if (redirectUrl && redirectUrl.startsWith("/") && !redirectUrl.startsWith("//") && !redirectUrl.startsWith("/\\")) {
+        finalTarget = redirectUrl;
       }
+      router.push(finalTarget);
     } else {
       setSuccess(true);
     }
@@ -118,11 +120,19 @@ export default function Register() {
         )}
         <div className="text-center text-sm">
           Already have an account?{" "}
-          <a href="/login" className="font-medium text-blue-600 hover:underline">
+          <a href={redirectUrl ? `/login?redirect=${encodeURIComponent(redirectUrl)}` : "/login"} className="font-medium text-blue-600 hover:underline">
             Sign In
           </a>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function Register() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Loading...</div>}>
+      <RegisterForm />
+    </Suspense>
   );
 }

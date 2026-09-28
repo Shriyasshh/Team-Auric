@@ -1,25 +1,30 @@
 "use client";
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
-export default function Login() {
+function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectUrl = searchParams.get("redirect");
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     const result = await supabase.auth.signInWithPassword({ email, password });
-    const { data, error } = result;
+    const { data, error: authError } = result;
     
-    if (error) {
-      setError(error.message);
+    if (authError) {
+      setError(authError.message);
     } else {
-      const target = data?.user?.user_metadata?.role === 'DOCTOR' ? "/doctor/dashboard" : "/patient/dashboard";
-      router.push(target);
+      let finalTarget = data?.user?.user_metadata?.role === 'DOCTOR' ? "/doctor/dashboard" : "/patient/dashboard";
+      if (redirectUrl && redirectUrl.startsWith("/") && !redirectUrl.startsWith("//") && !redirectUrl.startsWith("/\\")) {
+        finalTarget = redirectUrl;
+      }
+      router.push(finalTarget);
     }
   };
 
@@ -59,11 +64,19 @@ export default function Login() {
         </form>
         <div className="text-center text-sm">
           Don&apos;t have an account?{" "}
-          <a href="/register" className="font-medium text-blue-600 hover:underline">
+          <a href={redirectUrl ? `/register?redirect=${encodeURIComponent(redirectUrl)}` : "/register"} className="font-medium text-blue-600 hover:underline">
             Register here
           </a>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function Login() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Loading...</div>}>
+      <LoginForm />
+    </Suspense>
   );
 }

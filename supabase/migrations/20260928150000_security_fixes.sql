@@ -4,8 +4,6 @@
 -- Added `SET search_path = ''` and schema-qualified `public.profiles`.
 -- Restricted EXECUTE to `authenticated`.
 
-DROP FUNCTION IF EXISTS public.get_user_role();
-
 CREATE OR REPLACE FUNCTION public.get_user_role()
 RETURNS TEXT AS $$
 DECLARE
@@ -31,8 +29,8 @@ DECLARE
 BEGIN
     -- Extract and validate role from raw_user_meta_data
     role_val := UPPER(NEW.raw_user_meta_data->>'role');
-    IF role_val NOT IN ('PATIENT', 'DOCTOR', 'ADMIN') THEN
-        role_val := 'PATIENT'; -- Default fallback
+    IF role_val NOT IN ('PATIENT', 'DOCTOR') THEN
+        role_val := 'PATIENT'; -- Default fallback (ADMIN must be manually provisioned)
     END IF;
 
     -- Extract full_name
@@ -65,6 +63,10 @@ DROP POLICY IF EXISTS "Patients can view doctor profiles" ON public.profiles;
 CREATE OR REPLACE FUNCTION public.search_doctors(search_term TEXT)
 RETURNS TABLE (id UUID, full_name TEXT) AS $$
 BEGIN
+    IF public.get_user_role() != 'PATIENT' THEN
+        RETURN;
+    END IF;
+
     RETURN QUERY 
     SELECT p.id, p.full_name 
     FROM public.profiles p 
@@ -79,6 +81,10 @@ GRANT EXECUTE ON FUNCTION public.search_doctors(TEXT) TO authenticated;
 CREATE OR REPLACE FUNCTION public.search_patients(search_term TEXT)
 RETURNS TABLE (id UUID, full_name TEXT) AS $$
 BEGIN
+    IF public.get_user_role() != 'DOCTOR' THEN
+        RETURN;
+    END IF;
+
     RETURN QUERY 
     SELECT p.id, p.full_name 
     FROM public.profiles p 
@@ -91,6 +97,7 @@ REVOKE EXECUTE ON FUNCTION public.search_patients(TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.search_patients(TEXT) TO authenticated;
 
 -- Update RLS so Doctors can only select full profiles of Patients they interact with
+DROP POLICY IF EXISTS "Doctors can view interacting patient profiles" ON public.profiles;
 CREATE POLICY "Doctors can view interacting patient profiles" ON public.profiles
     FOR SELECT USING (
         public.get_user_role() = 'DOCTOR' AND role = 'PATIENT' AND (
@@ -100,6 +107,7 @@ CREATE POLICY "Doctors can view interacting patient profiles" ON public.profiles
     );
 
 -- Update RLS so Patients can only select full profiles of Doctors they interact with
+DROP POLICY IF EXISTS "Patients can view interacting doctor profiles" ON public.profiles;
 CREATE POLICY "Patients can view interacting doctor profiles" ON public.profiles
     FOR SELECT USING (
         public.get_user_role() = 'PATIENT' AND role = 'DOCTOR' AND (

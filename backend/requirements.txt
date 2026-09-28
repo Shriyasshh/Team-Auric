@@ -1,0 +1,8 @@
+fastapi[standard]>=0.103.0
+pydantic>=2.4.0
+python-dotenv>=1.0.0
+cryptography>=41.0.3
+httpx>=0.25.0
+mst-sdk-python>=1.0.1
+uvicorn>=0.23.2
+pytest>=7.4.0

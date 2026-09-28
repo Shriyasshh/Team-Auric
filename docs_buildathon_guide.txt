@@ -1,0 +1,270 @@
+MST Blockchain  —  AI & Web3 Builders Hackathon Track ​
+     Guide 1 of 8 
+ 
+MST BLOCKCHAIN 
+BUILDATHON  
+ Official Track Guide 
+ 
+ 
+ 
+ 
+About the MST Blockchain  
+The MST Blockchain challenges builders to create innovative, practical, and scalable products powered 
+by MST Blockchain. Go beyond traditional DApps, basic wallet integrations, and projects that simply bolt 
+blockchain on as a feature 
+Track Requirements - Mandatory 
+All five requirements below are mandatory for prize eligibility. Read them carefully before building. 
+ 
+1.  MST Blockchain Usage  
+●​ Your project must use MST Blockchain as a meaningful, integral part of the product. 
+●​ A simple wallet connection or single isolated transaction is not sufficient. 
+ 
+2.  MST Testnet Deployment   
+Every project must be deployed on MST Testnet before submission.  
+Your submission must include: 
+●​   MST Testnet contract address 
+●​   At least one verifiable MST Testnet transaction hash 
+●​   A working application or demo link (wherever applicable)​
+ 
+3.  Public GitHub Repository  
+Every team must submit a public GitHub repository with the project's full source code, 
+including: 
+Smart contracts + frontend / backend code 
+README with MST integration details, contract addresses, and setup instructions 
+ 
+ 
+                                                                                                  mstblockchain.com 
+
+MST Blockchain  —  AI & Web3 Builders Hackathon Track ​
+     Guide 2 of 8 
+​
+​
+4.  BridgeKey Wallet Integration - Strongly Recommended 
+BridgeKey is the official non-custodial wallet for MST Blockchain. 
+Teams are strongly encouraged to integrate BridgeKey for wallet connection, network 
+switching, 
+and smart contract signing in their DApps. 
+●​ BridgeKey Website:  bridgekey.io 
+●​ Chrome Extension: 
+chromewebstore.google.com/detail/bridgekey/bfjojdcfenehemjgjlepdjomkpginlkg 
+●​ Android App:  play.google.com/store/apps/details?id=com.bridgekey 
+ 
+5.  Working Product + On-Chain Proof 
+A working deployed application is strongly preferred over mockups. 
+Projects that judges can interact with and test will have a significant advantage. 
+Your project must have at least one verifiable MST Testnet transaction demonstrating core 
+functionality. 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+                                                                                                  mstblockchain.com 
+
+MST Blockchain  —  AI & Web3 Builders Hackathon Track ​
+     Guide 3 of 8 
+​
+What Can You Build? 
+These are suggested directions, not restrictions. The category matters less than the problem, innovation, 
+execution, and value you create by using MST Blockchain.​
+ 
+ 
+ 
+Suggested ideas across all track categories - ​
+pick any, combine, or build something entirely new. 
+ 
+                                                                                                  mstblockchain.com 
+
+MST Blockchain  —  AI & Web3 Builders Hackathon Track ​
+     Guide 4 of 8 
+MST Blockchain Developer Resources  
+Use the official MST tools and documentation to build quickly on MST Blockchain. Start with the Vibe Kit 
+for rapid scaffolding, use the JS/TS SDK for contract interaction, and verify transactions on MSTScan. 
+ 
+CORE DOCUMENTATION:​
+ 
+🔗 MST Blockchain Developer Resources 
+BridgeKey Wallet Extension​
+ 
+https://chromewebstore.google.com/detail/bridgekey/bfjojdcfenehemjgjlepdj
+omkpginlkg 
+Faucet – Claim $MSTC Tokens​
+ https://faucet.masterstroke.academy 
+TypeScript SDK​
+ https://www.npmjs.com/package/@mstblockchain/mst-sdk 
+Python SDK​
+ https://pypi.org/project/mst-sdk-python/ 
+VibeKit SDK​
+ https://www.npmjs.com/package/@mstblockchain/mst-vibe-kit 
+MCP Endpoint​
+ https://mcp.mstblockchain.com/sse 
+MCP Credentials 
+OAUTH_CLIENT_ID=mst-mcp-client 
+OAUTH_CLIENT_SECRET=mst-mcp-secret-key-350e3445 
+ 
+ 
+ 
+ 
+ 
+                                                                                                  mstblockchain.com 
+
+MST Blockchain  —  AI & Web3 Builders Hackathon Track ​
+     Guide 5 of 8 
+ 
+🎥 Video Tutorials 
+BridgeKey Wallet Installation & Faucet Claim​
+ 
+https://drive.google.com/drive/folders/1scDdqK2ef0R7qUEfGoCtSZjmDTuy3
+k6X 
+Private Key Option in BridgeKey Wallet​
+ 
+https://drive.google.com/drive/folders/1scDdqK2ef0R7qUEfGoCtSZjmDTuy3
+k6X 
+SDK Installation & Functions​
+ 
+https://drive.google.com/drive/folders/1scDdqK2ef0R7qUEfGoCtSZjmDTuy3
+k6X 
+VibeKit Installation​
+ 
+https://drive.google.com/drive/folders/1scDdqK2ef0R7qUEfGoCtSZjmDTuy3
+k6X 
+Smart Contract Deployment + Frontend Integration​
+ 
+https://drive.google.com/drive/folders/1scDdqK2ef0R7qUEfGoCtSZjmDTuy3
+k6X 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+                                                                                                  mstblockchain.com 
+
+MST Blockchain  —  AI & Web3 Builders Hackathon Track ​
+     Guide 6 of 8 
+ 
+MST Blockchain Website : mstblockchain.com 
+Official Docs : docs.mstblockchain.com 
+MST Vibe Kit  : docs.mstblockchain.com/developer-docs/foundation/vibe-kit 
+SDKs Overview :  docs.mstblockchain.com/developer-docs/foundation/mst-blockchain-sdks 
+MCP Documentation : docs.mstblockchain.com/developer-docs/foundation/mcp 
+ 
+MST Scan Explorer :  mstscan.com 
+Claim Testnet Faucet :  https://faucet.masterstroke.academy​
+ 
+BridgeKey Website :  bridgekey.io 
+BridgeKey Chrome Extension :  chromewebstore.google.com/detail/bridgekey/... 
+BridgeKey Android App :  play.google.com/store/apps/details?id=com.bridgekey 
+ 
+Judging Criteria 
+ 
+What Wins at This Hackathon 
+Problem  →  Solution  →  Meaningful MST Usage  →  Working Product  →  Testnet Deployment  →  
+Scale 
+ Strong ideas, meaningful blockchain integration, and solid execution is important. 
+ 
+Use of AI & Originality Policy 
+AI coding assistants, AI agents, MCP, Vibe Kit, SDKs, open-source libraries, and other developer tools 
+are all permitted. Every team must fully understand the code they submit and be ready to explain their 
+architecture, MST integration, and implementation decisions to judges. 
+ 
+⚠  Projects found to be substantially copied, plagiarised, or using fake / misleading deployment 
+or transaction data may be disqualified from all prizes.​
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+                                                                                                  mstblockchain.com 
+
+MST Blockchain  —  AI & Web3 Builders Hackathon Track ​
+     Guide 7 of 8 
+ 
+Prize Pool -  MST Blockchain Buildathon 
+ 
+Don't just build on blockchain — build something that becomes better because of blockchain 
+ 
+Build something that solves a real problem, creates genuine value for users, and demonstrates why 
+blockchain is essential to the product. We are looking for ideas that attract real users, create network 
+effects, drive adoption, and scale into a real product beyond the hackathon. 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+                                                                                                  mstblockchain.com 
+
+MST Blockchain  —  AI & Web3 Builders Hackathon Track ​
+     Guide 8 of 8 
+ 
+Final Project Submission 
+All teams must complete the final submission form before the hackathon deadline. This is 
+compulsory to be eligible for any MST Blockchain Track prize. Ensure all links are public and 
+accessible to the judging team. 
+ 
+SUBMISSION FORM — COMPULSORY TO FILL BEFORE HACKATHON ENDS 
+https://forms.gle/fkkVbfiwKmbL3BFp9 
+GitHub Repository  ·  Testnet Contract Address  ·  Transaction Hash  ·  Demo Link  ·  Demo Video 
+Social Award –  10 TEAMS 
+The Social Award recognises the team that creates the most creative and engaging content while building 
+their project on MST Blockchain. It is judged completely independently from the main technical awards. 
+ 
+Eligibility - Your video must: 
+•​ Be at least 30 seconds long 
+•​ Show your face or team members on camera 
+•​ Be publicly posted on Instagram  
+•​ Mention @mstblockchain and @newrro_tech  in the post or video 
+•​ Clearly show or mention you are building on MST Blockchain 
+•​ Be submitted through the final submission form before the deadline 
+Follow & Tag Us 
+Post your build journey, tag us, and mention @mstblockchain. Join the community and show the world 
+what you are building. 
+ 
+ 
+ 
+ 
+ 
+📸 Instagram 
+@mstblockchain 
+https://www.instagram.com/mstbloc
+kchain​
+ 
+ 
+ 
+ 
+ 
+JOIN WHATSAPP GROUP FOR MST BLOCKCHAIN TRACK: 
+https://chat.whatsapp.com/HViJDTRLZYiCSD6Xxcndoo 
+ 
+ 
+ 
+Build something useful.  Build something innovative.  Build something people 
+remember. 
+Build What Comes Next on MST Blockchain.  🚀 
+                                                                                                  mstblockchain.com 
+

@@ -20,8 +20,9 @@ This document outlines the security architecture for MediVault, focusing on Supa
 All application tables have RLS enabled. Security is enforced at the database level, preventing unauthorized access even if the API or frontend is bypassed.
 
 ### `profiles`
-- **SELECT**: Users can read their own profile. Doctors can read Patient profiles. Patients can read Doctor profiles. Admins can read all profiles.
-- **INSERT/UPDATE**: Users can only modify their own profile data (`auth.uid() = id`).
+- **SELECT**: Users can read their own profile. Doctors can only read profiles of Patients they are actively interacting with (via requests or permissions). Patients can only read profiles of Doctors they are actively interacting with. A separate `search_doctors` and `search_patients` SECURITY DEFINER function exists for directory lookups, returning ONLY `id` and `full_name`.
+- **INSERT**: Handled strictly via a database trigger (`handle_new_user`) on `auth.users` creation.
+- **UPDATE**: Users can only modify their own profile data (`auth.uid() = id`).
 - **DELETE**: Users can only delete their own profile.
 
 ### `medical_records` (Metadata)

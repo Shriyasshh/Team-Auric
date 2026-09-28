@@ -33,25 +33,16 @@ export async function register(formData: FormData) {
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
+    options: {
+      data: {
+        fullName,
+        role
+      }
+    }
   })
 
   if (error) {
     return { error: error.message }
-  }
-
-  if (data.user) {
-    // Insert into profiles
-    const { error: profileError } = await supabase.from('profiles').insert([
-      {
-        id: data.user.id,
-        full_name: fullName,
-        role: role.toUpperCase(),
-      }
-    ])
-
-    if (profileError) {
-      return { error: profileError.message }
-    }
   }
 
   revalidatePath('/', 'layout')

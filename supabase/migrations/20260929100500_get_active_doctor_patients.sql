@@ -15,12 +15,13 @@ BEGIN
 
     -- Return only the active sessions within the 2-hour care window
     RETURN QUERY
-    SELECT p.id, p.full_name, q.claimed_at, (q.claimed_at + INTERVAL '2 hours') AS session_expires_at
+    SELECT p.id, p.full_name, MAX(q.claimed_at) AS claimed_at, (MAX(q.claimed_at) + INTERVAL '2 hours') AS session_expires_at
     FROM public.profiles p
     JOIN public.qr_sessions q ON p.id = q.patient_id
     WHERE q.status = 'claimed' 
       AND q.claimed_by_doctor_id = auth.uid()
-      AND q.claimed_at > NOW() - INTERVAL '2 hours';
+      AND q.claimed_at > NOW() - INTERVAL '2 hours'
+    GROUP BY p.id, p.full_name;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = '';
 

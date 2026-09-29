@@ -286,7 +286,7 @@ async def anchor_medical_record(record_id: str, user = Depends(verify_auth)):
 
         tx = contract.functions.anchorRecord(record_id, record_hash).build_transaction({
             'from': account.address,
-            'nonce': w3.eth.get_transaction_count(account.address),
+            'nonce': w3.eth.get_transaction_count(account.address, 'pending'),
             'gas': 2000000,
             'gasPrice': w3.eth.gas_price
         })

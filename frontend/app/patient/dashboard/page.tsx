@@ -10,6 +10,7 @@ type MedicalRecord = {
   description: string;
   created_at: string;
   patient_id: string;
+  storage_path?: string;
   [key: string]: unknown;
 };
 
@@ -37,16 +38,57 @@ export default function Dashboard() {
     fetchRecords();
   }, []);
 
+  const handleDownload = async (recordId: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not authenticated");
+
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const response = await fetch(`${apiUrl}/api/records/${recordId}/download`, {
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`
+        }
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail || "Download failed");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+
+      const disposition = response.headers.get('content-disposition');
+      let filename = `medical_file_${recordId}`;
+      if (disposition && disposition.indexOf('filename=') !== -1) {
+        const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition);
+        if (matches != null && matches[1]) {
+          filename = matches[1].replace(/['"]/g, '');
+        }
+      }
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err: unknown) {
+      const e = err as Error;
+      alert(`Error downloading file: ${e.message}`);
+    }
+  };
+
   return (
     <div className="p-4 md:p-8">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Patient Dashboard</h1>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        
+
         {/* New Primary QR Workflow */}
         <PatientConnectQr />
-        
+
         <div className="flex flex-col gap-6">
           <div className="p-6 border rounded-lg bg-card shadow-sm">
             <h2 className="text-lg font-semibold mb-4">My Records</h2>
@@ -64,13 +106,21 @@ export default function Dashboard() {
                         {rec.created_at ? new Date(rec.created_at).toLocaleDateString() : ""}
                       </span>
                     </div>
-                    <p className="text-sm text-slate-700 mt-1 whitespace-pre-wrap">{rec.description}</p>
+                    <p className="text-sm text-slate-700 mt-1 mb-2 whitespace-pre-wrap">{rec.description}</p>
+                    {rec.storage_path && (
+                      <button
+                        onClick={() => handleDownload(rec.id)}
+                        className="inline-block text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded hover:bg-blue-200 transition-colors mt-2"
+                      >
+                        Download File
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
             )}
           </div>
-          
+
           <div className="p-6 border rounded-lg bg-card shadow-sm">
             <h2 className="text-lg font-semibold mb-2">Recent Audits</h2>
             <p className="text-sm text-slate-500 mt-4">No recent activity.</p>

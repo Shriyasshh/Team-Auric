@@ -9,6 +9,7 @@ type MedicalRecord = {
   description: string;
   created_at: string;
   patient_id: string;
+  storage_path?: string;
   [key: string]: unknown;
 };
 
@@ -20,6 +21,7 @@ export default function DoctorDashboard() {
   const [errorMsg, setErrorMsg] = useState("");
   const [recordType, setRecordType] = useState("");
   const [notes, setNotes] = useState("");
+  const [file, setFile] = useState<File | null>(null);
   const [records, setRecords] = useState<MedicalRecord[]>([]);
 
   const fetchRecentRecords = useCallback(async () => {
@@ -51,6 +53,41 @@ export default function DoctorDashboard() {
     }
   }, [fetchRecentRecords]);
 
+  const handleDownload = async (recordId: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not authenticated");
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const response = await fetch(`${apiUrl}/api/records/${recordId}/download`, {
+        headers: { "Authorization": `Bearer ${session.access_token}` }
+      });
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail || "Download failed");
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const disposition = response.headers.get('content-disposition');
+      let filename = `medical_file_${recordId}`;
+      if (disposition && disposition.indexOf('filename=') !== -1) {
+        const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition);
+        if (matches != null && matches[1]) {
+          filename = matches[1].replace(/['"]/g, '');
+        }
+      }
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err: unknown) {
+      const e = err as Error;
+      alert(`Error downloading file: ${e.message}`);
+    }
+  };
+
   const handleCreateRecord = async (e: React.FormEvent) => {
     e.preventDefault();
     setSuccessMsg("");
@@ -66,31 +103,65 @@ export default function DoctorDashboard() {
       return;
     }
 
+    if (file) {
+      const MAX_SIZE = 10 * 1024 * 1024;
+      if (file.size > MAX_SIZE) {
+        setErrorMsg("File too large. Maximum allowed size is 10MB.");
+        return;
+      }
+      const allowed = ["application/pdf", "image/jpeg", "image/png", "text/plain"];
+      if (!allowed.includes(file.type)) {
+        setErrorMsg("File type not supported. Please use PDF, JPG, PNG, or TXT.");
+        return;
+      }
+    }
+
     setLoading(true);
 
     try {
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      const { data: { session }, error: authError } = await supabase.auth.getSession();
 
-      if (authError || !user) {
+      if (authError || !session?.user) {
         throw new Error("You must be logged in.");
       }
 
-      const { error: insertError } = await supabase
+      const user = session.user;
+
+      const { data: insertData, error: insertError } = await supabase
         .from("medical_records")
         .insert({
           patient_id: activePatientId,
           created_by_doctor_id: user.id,
           record_type: recordType,
           description: notes
-        });
+        })
+        .select();
 
-      if (insertError) {
-        throw insertError;
+      if (insertError || !insertData) {
+        throw insertError || new Error("Failed to create record");
+      }
+
+      const newRecordId = insertData[0].id;
+
+      if (file) {
+        const formData = new FormData();
+        formData.append("file", file);
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        const response = await fetch(`${apiUrl}/api/records/${newRecordId}/upload`, {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${session.access_token}` },
+          body: formData
+        });
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.detail || "Failed to encrypt and upload medical file.");
+        }
       }
 
       setSuccessMsg("Medical record successfully created.");
       setRecordType("");
       setNotes("");
+      setFile(null);
 
       fetchRecentRecords();
 
@@ -160,6 +231,17 @@ export default function DoctorDashboard() {
                 />
               </div>
 
+              <div>
+                <label className="block text-sm font-medium mb-1">Medical File (Optional)</label>
+                <input
+                  type="file"
+                  onChange={e => setFile(e.target.files ? e.target.files[0] : null)}
+                  className="w-full px-4 py-2 border rounded-md focus:outline-none"
+                  accept="application/pdf,image/jpeg,image/png,text/plain"
+                />
+                <p className="text-xs text-slate-500 mt-1">Supported formats: PDF, JPG, PNG, TXT. Max size: 10MB.</p>
+              </div>
+
               <button
                 type="submit"
                 disabled={loading}
@@ -184,10 +266,20 @@ export default function DoctorDashboard() {
                         {rec.created_at ? new Date(rec.created_at).toLocaleDateString() : "Just now"}
                       </span>
                     </div>
-                    <p className="text-sm text-slate-700 whitespace-pre-wrap">{rec.description}</p>
-                    {rec.patient_id === activePatientId && (
-                      <span className="inline-block mt-3 text-xs bg-green-100 text-green-700 px-2 py-1 rounded">For Connected Patient</span>
-                    )}
+                    <p className="text-sm text-slate-700 mt-2 mb-3 whitespace-pre-wrap">{rec.description}</p>
+                    <div className="flex gap-2">
+                      {rec.patient_id === activePatientId && (
+                        <span className="inline-block text-xs bg-green-100 text-green-700 px-2 py-1 rounded">For Connected Patient</span>
+                      )}
+                      {rec.storage_path && (
+                        <button
+                          onClick={() => handleDownload(rec.id)}
+                          className="inline-block text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded hover:bg-blue-200 transition-colors"
+                        >
+                          Download File
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

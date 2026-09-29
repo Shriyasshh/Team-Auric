@@ -6,3 +6,5 @@ httpx>=0.25.0
 mst-sdk-python>=1.0.1
 uvicorn>=0.23.2
 pytest>=7.4.0
+supabase>=2.0.0
+python-multipart>=0.0.9

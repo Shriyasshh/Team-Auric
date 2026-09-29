@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
 type MedicalRecord = {
@@ -21,6 +21,7 @@ export default function DoctorDashboard() {
   const [activePatients, setActivePatients] = useState<{patient_id: string, full_name: string, claimed_at: string, session_expires_at: string}[]>([]);
   const [now, setNow] = useState<number>(0);
   const [loading, setLoading] = useState(false);
+  const [anchoring, setAnchoring] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [recordType, setRecordType] = useState("");
@@ -29,6 +30,7 @@ export default function DoctorDashboard() {
   const [records, setRecords] = useState<MedicalRecord[]>([]);
   const [verifyStatus, setVerifyStatus] = useState<Record<string, { status: string, message: string }>>({});
   const [verifying, setVerifying] = useState<Record<string, boolean>>({});
+  const realtimeChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const fetchRecentRecords = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -64,19 +66,58 @@ export default function DoctorDashboard() {
     sessionStorage.setItem("active_patient_name", patientName);
   };
 
+  // Subscribe to real-time medical_records changes (blockchain_status updates)
+  const setupRealtimeSubscription = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    // Clean up previous channel
+    if (realtimeChannelRef.current) {
+      supabase.removeChannel(realtimeChannelRef.current);
+    }
+
+    const channel = supabase
+      .channel(`doctor-records-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'medical_records',
+          filter: `created_by_doctor_id=eq.${user.id}`,
+        },
+        (payload) => {
+          // Live-update the specific record in state without full refetch
+          if (payload.eventType === 'INSERT') {
+            setRecords(prev => {
+              const exists = prev.some(r => r.id === (payload.new as MedicalRecord).id);
+              if (exists) return prev;
+              return [payload.new as MedicalRecord, ...prev].slice(0, 10);
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            setRecords(prev =>
+              prev.map(r => r.id === (payload.new as MedicalRecord).id ? (payload.new as MedicalRecord) : r)
+            );
+          }
+        }
+      )
+      .subscribe();
+
+    realtimeChannelRef.current = channel;
+  }, []);
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setNow(new Date().getTime());
-    const interval = setInterval(() => setNow(new Date().getTime()), 60000); // Update every minute
+    const interval = setInterval(() => setNow(new Date().getTime()), 60000);
     return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
-    // 1. Always fetch recent records, even if no patient is connected
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchRecentRecords();
+    setupRealtimeSubscription();
 
-    // 2. Validate the patient context from sessionStorage securely
     const validateSession = async () => {
       const pId = sessionStorage.getItem("active_patient_id");
       const pName = sessionStorage.getItem("active_patient_name");
@@ -87,7 +128,6 @@ export default function DoctorDashboard() {
           setActivePatientId(pId);
           setActivePatientName(pName);
         } else {
-          // Stale or expired session, clear it
           sessionStorage.removeItem("active_patient_id");
           sessionStorage.removeItem("active_patient_name");
           setActivePatientId(null);
@@ -100,7 +140,39 @@ export default function DoctorDashboard() {
     };
 
     validateSession();
-  }, [fetchRecentRecords]);
+
+    // Cleanup realtime on unmount
+    return () => {
+      if (realtimeChannelRef.current) {
+        supabase.removeChannel(realtimeChannelRef.current);
+      }
+    };
+  }, [fetchRecentRecords, setupRealtimeSubscription]);
+
+  // Poll PENDING records every 5s as fallback for when Realtime hasn't settled
+  useEffect(() => {
+    const hasPending = records.some(r => r.blockchain_status === 'PENDING');
+    if (!hasPending) return;
+
+    const pollTimer = setInterval(async () => {
+      const pendingIds = records.filter(r => r.blockchain_status === 'PENDING').map(r => r.id);
+      if (pendingIds.length === 0) { clearInterval(pollTimer); return; }
+
+      const { data } = await supabase
+        .from('medical_records')
+        .select('id, blockchain_status, blockchain_tx_hash')
+        .in('id', pendingIds);
+
+      if (data) {
+        setRecords(prev => prev.map(r => {
+          const updated = data.find((d: {id: string}) => d.id === r.id);
+          return updated ? { ...r, ...updated } : r;
+        }));
+      }
+    }, 5000);
+
+    return () => clearInterval(pollTimer);
+  }, [records]);
 
   const handleDownload = async (recordId: string) => {
     try {
@@ -229,22 +301,32 @@ export default function DoctorDashboard() {
         }
       }
 
-      // Anchor the record to blockchain
+      // Anchor the record to blockchain (non-blocking: UI updates live via Realtime)
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      const anchorRes = await fetch(`${apiUrl}/api/records/${newRecordId}/anchor`, {
-        method: "POST",
-        headers: { "Authorization": `Bearer ${session.access_token}` },
-      });
-      if (!anchorRes.ok) {
-        console.error("Failed to anchor on MST Testnet");
-      }
-
-      setSuccessMsg("Medical record successfully created and anchored to MST Testnet.");
+      setAnchoring(true);
+      setSuccessMsg("Record saved. Anchoring to MST Blockchain...");
       setRecordType("");
       setNotes("");
       setFile(null);
 
-      fetchRecentRecords();
+      // Fire anchor in background so UI is responsive; Realtime will update the record card
+      fetch(`${apiUrl}/api/records/${newRecordId}/anchor`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${session.access_token}` },
+      }).then(async (anchorRes) => {
+        if (anchorRes.ok) {
+          setSuccessMsg("Record saved and anchored to MST Testnet. Blockchain status updated below.");
+        } else {
+          setSuccessMsg("Record saved. MST anchoring failed — check blockchain status below.");
+        }
+        setAnchoring(false);
+        // Always refresh after anchor resolves to get final DB state
+        fetchRecentRecords();
+      }).catch(() => {
+        setSuccessMsg("Record saved. MST anchor request failed — status may update shortly.");
+        setAnchoring(false);
+        fetchRecentRecords();
+      });
 
     } catch (err: unknown) {
       console.error("Insert error:", err);
@@ -259,6 +341,10 @@ export default function DoctorDashboard() {
     <div className="p-8 max-w-4xl mx-auto space-y-8">
       <div className="flex justify-between items-center border-b pb-4">
         <h1 className="text-3xl font-bold">Doctor Dashboard</h1>
+        <div className="flex items-center gap-2 text-xs text-green-600 font-medium">
+          <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+          Live updates on
+        </div>
       </div>
 
       {!activePatientId ? (
@@ -273,7 +359,6 @@ export default function DoctorDashboard() {
             ) : (
               <div className="space-y-3 mt-4 text-left">
                 {activePatients.map(p => {
-                  // eslint-disable-next-line react-hooks/purity
                   const currentT = now || new Date().getTime();
                   const remaining = Math.max(0, Math.floor((new Date(p.session_expires_at).getTime() - currentT) / 60000));
                   const hours = Math.floor(remaining / 60);
@@ -306,7 +391,8 @@ export default function DoctorDashboard() {
             <h2 className="text-xl font-semibold mb-4">Add Medical Record</h2>
 
             {successMsg && (
-              <div className="mb-4 p-4 bg-green-50 text-green-700 border border-green-200 rounded-md">
+              <div className="mb-4 p-4 bg-green-50 text-green-700 border border-green-200 rounded-md flex items-center gap-2">
+                {anchoring && <span className="inline-block w-3 h-3 rounded-full border-2 border-green-500 border-t-transparent animate-spin"></span>}
                 {successMsg}
               </div>
             )}

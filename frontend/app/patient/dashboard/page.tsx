@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import PatientConnectQr from "@/components/PatientConnectQr";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -21,12 +21,14 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [verifyStatus, setVerifyStatus] = useState<Record<string, { status: string, message: string }>>({});
   const [verifying, setVerifying] = useState<Record<string, boolean>>({});
+  const realtimeChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   useEffect(() => {
-    const fetchRecords = async () => {
+    const fetchAndSubscribe = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      // Initial fetch
       const { data, error } = await supabase
         .from("medical_records")
         .select("*")
@@ -37,10 +39,74 @@ export default function Dashboard() {
         setRecords(data);
       }
       setLoading(false);
+
+      // Subscribe to live updates (new records from doctor, blockchain_status changes)
+      if (realtimeChannelRef.current) {
+        supabase.removeChannel(realtimeChannelRef.current);
+      }
+
+      const channel = supabase
+        .channel(`patient-records-${user.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'medical_records',
+            filter: `patient_id=eq.${user.id}`,
+          },
+          (payload) => {
+            if (payload.eventType === 'INSERT') {
+              setRecords(prev => {
+                const exists = prev.some(r => r.id === (payload.new as MedicalRecord).id);
+                if (exists) return prev;
+                return [payload.new as MedicalRecord, ...prev];
+              });
+            } else if (payload.eventType === 'UPDATE') {
+              setRecords(prev =>
+                prev.map(r => r.id === (payload.new as MedicalRecord).id ? (payload.new as MedicalRecord) : r)
+              );
+            }
+          }
+        )
+        .subscribe();
+
+      realtimeChannelRef.current = channel;
     };
 
-    fetchRecords();
+    fetchAndSubscribe();
+
+    return () => {
+      if (realtimeChannelRef.current) {
+        supabase.removeChannel(realtimeChannelRef.current);
+      }
+    };
   }, []);
+
+  // Poll PENDING records every 5s as fallback for Realtime
+  useEffect(() => {
+    const hasPending = records.some(r => r.blockchain_status === 'PENDING');
+    if (!hasPending) return;
+
+    const pollTimer = setInterval(async () => {
+      const pendingIds = records.filter(r => r.blockchain_status === 'PENDING').map(r => r.id);
+      if (pendingIds.length === 0) { clearInterval(pollTimer); return; }
+
+      const { data } = await supabase
+        .from('medical_records')
+        .select('id, blockchain_status, blockchain_tx_hash')
+        .in('id', pendingIds);
+
+      if (data) {
+        setRecords(prev => prev.map(r => {
+          const updated = data.find((d: {id: string}) => d.id === r.id);
+          return updated ? { ...r, ...updated } : r;
+        }));
+      }
+    }, 5000);
+
+    return () => clearInterval(pollTimer);
+  }, [records]);
 
   const handleDownload = async (recordId: string) => {
     try {
@@ -109,6 +175,10 @@ export default function Dashboard() {
     <div className="p-4 md:p-8">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Patient Dashboard</h1>
+        <div className="flex items-center gap-2 text-xs text-green-600 font-medium">
+          <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+          Live updates on
+        </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 

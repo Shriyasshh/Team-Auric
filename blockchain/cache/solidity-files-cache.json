@@ -1,0 +1,41 @@
+{
+  "_format": "hh-sol-cache-2",
+  "files": {
+    "D:\\Languages\\Team Auric\\Team-Auric\\blockchain\\contracts\\MediVaultAnchor.sol": {
+      "lastModificationDate": 1790642127702,
+      "contentHash": "f6c9bf949e233b3c35e005bede914c36",
+      "sourceName": "contracts/MediVaultAnchor.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": false,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "MediVaultAnchor"
+      ]
+    }
+  }
+}

@@ -11,6 +11,8 @@ type MedicalRecord = {
   created_at: string;
   patient_id: string;
   storage_path?: string;
+  blockchain_status?: string;
+  blockchain_tx_hash?: string;
   [key: string]: unknown;
 };
 
@@ -79,6 +81,25 @@ export default function Dashboard() {
     }
   };
 
+  const handleVerify = async (recordId: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not authenticated");
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const response = await fetch(`${apiUrl}/api/records/${recordId}/verify`, {
+        headers: { "Authorization": `Bearer ${session.access_token}` }
+      });
+      if (!response.ok) {
+        throw new Error("Verification failed");
+      }
+      const data = await response.json();
+      alert(`Status: ${data.status}\nMessage: ${data.message}\nTx Hash: ${data.tx_hash || 'N/A'}`);
+    } catch (err: unknown) {
+      const e = err as Error;
+      alert(`Error verifying record: ${e.message}`);
+    }
+  };
+
   return (
     <div className="p-4 md:p-8">
       <div className="flex justify-between items-center mb-6">
@@ -107,14 +128,24 @@ export default function Dashboard() {
                       </span>
                     </div>
                     <p className="text-sm text-slate-700 mt-1 mb-2 whitespace-pre-wrap">{rec.description}</p>
-                    {rec.storage_path && (
-                      <button
-                        onClick={() => handleDownload(rec.id)}
-                        className="inline-block text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded hover:bg-blue-200 transition-colors mt-2"
-                      >
-                        Download File
-                      </button>
-                    )}
+                    <div className="flex gap-2 mt-2">
+                      {rec.storage_path && (
+                        <button
+                          onClick={() => handleDownload(rec.id)}
+                          className="inline-block text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded hover:bg-blue-200 transition-colors"
+                        >
+                          Download File
+                        </button>
+                      )}
+                      {rec.blockchain_status === "ANCHORED" && (
+                        <button
+                          onClick={() => handleVerify(rec.id)}
+                          className="inline-block text-xs bg-purple-100 text-purple-700 px-3 py-1 rounded hover:bg-purple-200 transition-colors"
+                        >
+                          Verify Integrity
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

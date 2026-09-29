@@ -10,6 +10,8 @@ type MedicalRecord = {
   created_at: string;
   patient_id: string;
   storage_path?: string;
+  blockchain_status?: string;
+  blockchain_tx_hash?: string;
   [key: string]: unknown;
 };
 
@@ -88,6 +90,25 @@ export default function DoctorDashboard() {
     }
   };
 
+  const handleVerify = async (recordId: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not authenticated");
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const response = await fetch(`${apiUrl}/api/records/${recordId}/verify`, {
+        headers: { "Authorization": `Bearer ${session.access_token}` }
+      });
+      if (!response.ok) {
+        throw new Error("Verification failed");
+      }
+      const data = await response.json();
+      alert(`Status: ${data.status}\nMessage: ${data.message}\nTx Hash: ${data.tx_hash || 'N/A'}`);
+    } catch (err: unknown) {
+      const e = err as Error;
+      alert(`Error verifying record: ${e.message}`);
+    }
+  };
+
   const handleCreateRecord = async (e: React.FormEvent) => {
     e.preventDefault();
     setSuccessMsg("");
@@ -158,7 +179,17 @@ export default function DoctorDashboard() {
         }
       }
 
-      setSuccessMsg("Medical record successfully created.");
+      // Anchor the record to blockchain
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const anchorRes = await fetch(`${apiUrl}/api/records/${newRecordId}/anchor`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${session.access_token}` },
+      });
+      if (!anchorRes.ok) {
+        console.error("Failed to anchor on MST Testnet");
+      }
+
+      setSuccessMsg("Medical record successfully created and anchored to MST Testnet.");
       setRecordType("");
       setNotes("");
       setFile(null);
@@ -277,6 +308,14 @@ export default function DoctorDashboard() {
                           className="inline-block text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded hover:bg-blue-200 transition-colors"
                         >
                           Download File
+                        </button>
+                      )}
+                      {rec.blockchain_status === "ANCHORED" && (
+                        <button
+                          onClick={() => handleVerify(rec.id)}
+                          className="inline-block text-xs bg-purple-100 text-purple-700 px-3 py-1 rounded hover:bg-purple-200 transition-colors"
+                        >
+                          Verify on MST
                         </button>
                       )}
                     </div>

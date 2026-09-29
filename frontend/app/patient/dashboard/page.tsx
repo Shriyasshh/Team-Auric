@@ -19,6 +19,8 @@ type MedicalRecord = {
 export default function Dashboard() {
   const [records, setRecords] = useState<MedicalRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [verifyStatus, setVerifyStatus] = useState<Record<string, { status: string, message: string }>>({});
+  const [verifying, setVerifying] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const fetchRecords = async () => {
@@ -83,6 +85,7 @@ export default function Dashboard() {
 
   const handleVerify = async (recordId: string) => {
     try {
+      setVerifying(prev => ({ ...prev, [recordId]: true }));
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Not authenticated");
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -93,10 +96,12 @@ export default function Dashboard() {
         throw new Error("Verification failed");
       }
       const data = await response.json();
-      alert(`Status: ${data.status}\nMessage: ${data.message}\nTx Hash: ${data.tx_hash || 'N/A'}`);
+      setVerifyStatus(prev => ({ ...prev, [recordId]: { status: data.status, message: data.message } }));
     } catch (err: unknown) {
       const e = err as Error;
-      alert(`Error verifying record: ${e.message}`);
+      setVerifyStatus(prev => ({ ...prev, [recordId]: { status: "error", message: e.message } }));
+    } finally {
+      setVerifying(prev => ({ ...prev, [recordId]: false }));
     }
   };
 
@@ -137,14 +142,48 @@ export default function Dashboard() {
                           Download File
                         </button>
                       )}
-                      {rec.blockchain_status === "ANCHORED" && (
-                        <button
-                          onClick={() => handleVerify(rec.id)}
-                          className="inline-block text-xs bg-purple-100 text-purple-700 px-3 py-1 rounded hover:bg-purple-200 transition-colors"
-                        >
-                          Verify Integrity
-                        </button>
-                      )}
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-slate-200">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="text-xs text-slate-600">
+                          <span className="font-semibold">MST Status:</span>{" "}
+                          <span className={`px-2 py-0.5 rounded-full font-medium ${
+                            rec.blockchain_status === 'ANCHORED' ? 'bg-green-100 text-green-700' :
+                            rec.blockchain_status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' :
+                            rec.blockchain_status === 'FAILED' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-700'
+                          }`}>
+                            {rec.blockchain_status || 'UNKNOWN'}
+                          </span>
+                          {rec.blockchain_tx_hash && (
+                            <div className="mt-1 font-mono text-[10px] break-all text-slate-500 max-w-[200px] sm:max-w-[300px]">
+                              Tx: {rec.blockchain_tx_hash}
+                            </div>
+                          )}
+                        </div>
+
+                        {rec.blockchain_status === "ANCHORED" && (
+                          <div className="flex items-center gap-2 mt-2 sm:mt-0">
+                             {verifyStatus[rec.id] && (
+                               <span className={`text-xs font-semibold ${
+                                 verifyStatus[rec.id].status === 'verified' ? 'text-green-600' :
+                                 verifyStatus[rec.id].status === 'mismatch' ? 'text-red-600' : 'text-orange-600'
+                               }`}>
+                                 {verifyStatus[rec.id].status === 'verified' ? '✅ Integrity Verified' :
+                                  verifyStatus[rec.id].status === 'mismatch' ? '❌ Integrity Mismatch' :
+                                  verifyStatus[rec.id].message}
+                               </span>
+                             )}
+                             <button
+                               onClick={() => handleVerify(rec.id)}
+                               disabled={verifying[rec.id]}
+                               className="inline-block text-xs bg-purple-100 text-purple-700 px-3 py-1.5 rounded hover:bg-purple-200 transition-colors disabled:opacity-50 font-medium whitespace-nowrap"
+                             >
+                               {verifying[rec.id] ? "Verifying..." : "Verify on MST"}
+                             </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}

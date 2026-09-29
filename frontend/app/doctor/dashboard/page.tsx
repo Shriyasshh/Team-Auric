@@ -18,6 +18,8 @@ type MedicalRecord = {
 export default function DoctorDashboard() {
   const [activePatientId, setActivePatientId] = useState<string | null>(null);
   const [activePatientName, setActivePatientName] = useState<string | null>(null);
+  const [activePatients, setActivePatients] = useState<{patient_id: string, full_name: string, claimed_at: string, session_expires_at: string}[]>([]);
+  const [now, setNow] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
@@ -25,6 +27,8 @@ export default function DoctorDashboard() {
   const [notes, setNotes] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [records, setRecords] = useState<MedicalRecord[]>([]);
+  const [verifyStatus, setVerifyStatus] = useState<Record<string, { status: string, message: string }>>({});
+  const [verifying, setVerifying] = useState<Record<string, boolean>>({});
 
   const fetchRecentRecords = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -42,17 +46,60 @@ export default function DoctorDashboard() {
     }
   }, []);
 
-  useEffect(() => {
-    // 1. Get the patient context from sessionStorage
-    const pId = sessionStorage.getItem("active_patient_id");
-    const pName = sessionStorage.getItem("active_patient_name");
-
-    if (pId && pName) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setActivePatientId(pId);
-      setActivePatientName(pName);
-      fetchRecentRecords();
+  const fetchActivePatients = async () => {
+    try {
+      const { data, error } = await supabase.rpc("get_active_doctor_patients");
+      if (!error && data) {
+        setActivePatients(data as {patient_id: string, full_name: string, claimed_at: string, session_expires_at: string}[]);
+      }
+    } catch (err) {
+      console.error("Failed to fetch active patients", err);
     }
+  };
+
+  const handleSelectActivePatient = (patientId: string, patientName: string) => {
+    setActivePatientId(patientId);
+    setActivePatientName(patientName);
+    sessionStorage.setItem("active_patient_id", patientId);
+    sessionStorage.setItem("active_patient_name", patientName);
+  };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setNow(new Date().getTime());
+    const interval = setInterval(() => setNow(new Date().getTime()), 60000); // Update every minute
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    // 1. Always fetch recent records, even if no patient is connected
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchRecentRecords();
+
+    // 2. Validate the patient context from sessionStorage securely
+    const validateSession = async () => {
+      const pId = sessionStorage.getItem("active_patient_id");
+      const pName = sessionStorage.getItem("active_patient_name");
+
+      if (pId && pName) {
+        const { data, error } = await supabase.rpc("get_active_patient_context", { target_patient_id: pId });
+        if (data && data.length > 0 && !error) {
+          setActivePatientId(pId);
+          setActivePatientName(pName);
+        } else {
+          // Stale or expired session, clear it
+          sessionStorage.removeItem("active_patient_id");
+          sessionStorage.removeItem("active_patient_name");
+          setActivePatientId(null);
+          setActivePatientName(null);
+          fetchActivePatients();
+        }
+      } else {
+        fetchActivePatients();
+      }
+    };
+
+    validateSession();
   }, [fetchRecentRecords]);
 
   const handleDownload = async (recordId: string) => {
@@ -92,6 +139,7 @@ export default function DoctorDashboard() {
 
   const handleVerify = async (recordId: string) => {
     try {
+      setVerifying(prev => ({ ...prev, [recordId]: true }));
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Not authenticated");
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -102,10 +150,12 @@ export default function DoctorDashboard() {
         throw new Error("Verification failed");
       }
       const data = await response.json();
-      alert(`Status: ${data.status}\nMessage: ${data.message}\nTx Hash: ${data.tx_hash || 'N/A'}`);
+      setVerifyStatus(prev => ({ ...prev, [recordId]: { status: data.status, message: data.message } }));
     } catch (err: unknown) {
       const e = err as Error;
-      alert(`Error verifying record: ${e.message}`);
+      setVerifyStatus(prev => ({ ...prev, [recordId]: { status: "error", message: e.message } }));
+    } finally {
+      setVerifying(prev => ({ ...prev, [recordId]: false }));
     }
   };
 
@@ -212,8 +262,37 @@ export default function DoctorDashboard() {
       </div>
 
       {!activePatientId ? (
-        <div className="p-6 border rounded-lg bg-card shadow-sm text-center">
-          <p className="text-slate-500">Scan a patient&apos;s QR code to begin a 2-hour care session.</p>
+        <div className="space-y-6">
+          <div className="p-6 border rounded-lg bg-card shadow-sm text-center">
+            <h2 className="text-xl font-semibold mb-2">ACTIVE PATIENTS</h2>
+            {activePatients.length === 0 ? (
+              <>
+                <p className="text-slate-500 mb-2">No active patient sessions.</p>
+                <p className="text-sm text-slate-400">Scan a patient&apos;s QR code to start a care session.</p>
+              </>
+            ) : (
+              <div className="space-y-3 mt-4 text-left">
+                {activePatients.map(p => {
+                  // eslint-disable-next-line react-hooks/purity
+                  const currentT = now || new Date().getTime();
+                  const remaining = Math.max(0, Math.floor((new Date(p.session_expires_at).getTime() - currentT) / 60000));
+                  const hours = Math.floor(remaining / 60);
+                  const mins = remaining % 60;
+                  return (
+                    <div key={p.patient_id} className="p-4 border border-blue-200 rounded-md flex justify-between items-center bg-blue-50 cursor-pointer hover:bg-blue-100 transition-colors" onClick={() => handleSelectActivePatient(p.patient_id, p.full_name)}>
+                      <div>
+                        <h3 className="font-semibold text-blue-900">{p.full_name}</h3>
+                        <p className="text-xs text-blue-700">Connected</p>
+                      </div>
+                      <span className="px-3 py-1 bg-white text-blue-700 text-xs rounded-full font-medium shadow-sm border border-blue-100">
+                        {hours}h {mins}m remaining
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       ) : (
         <div className="space-y-8">
@@ -282,50 +361,84 @@ export default function DoctorDashboard() {
               </button>
             </form>
           </div>
-
-          <div className="p-6 border rounded-lg bg-white shadow-sm">
-            <h2 className="text-xl font-semibold mb-4">Your Recent Records</h2>
-            {records.length === 0 ? (
-              <p className="text-slate-500 text-sm">No records created by you.</p>
-            ) : (
-              <div className="space-y-4">
-                {records.map(rec => (
-                  <div key={rec.id} className="p-4 border rounded-md bg-slate-50">
-                    <div className="flex justify-between items-start mb-2">
-                      <h3 className="font-semibold">{rec.record_type}</h3>
-                      <span className="text-xs text-slate-400">
-                        {rec.created_at ? new Date(rec.created_at).toLocaleDateString() : "Just now"}
-                      </span>
-                    </div>
-                    <p className="text-sm text-slate-700 mt-2 mb-3 whitespace-pre-wrap">{rec.description}</p>
-                    <div className="flex gap-2">
-                      {rec.patient_id === activePatientId && (
-                        <span className="inline-block text-xs bg-green-100 text-green-700 px-2 py-1 rounded">For Connected Patient</span>
-                      )}
-                      {rec.storage_path && (
-                        <button
-                          onClick={() => handleDownload(rec.id)}
-                          className="inline-block text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded hover:bg-blue-200 transition-colors"
-                        >
-                          Download File
-                        </button>
-                      )}
-                      {rec.blockchain_status === "ANCHORED" && (
-                        <button
-                          onClick={() => handleVerify(rec.id)}
-                          className="inline-block text-xs bg-purple-100 text-purple-700 px-3 py-1 rounded hover:bg-purple-200 transition-colors"
-                        >
-                          Verify on MST
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
       )}
+
+      <div className="p-6 border rounded-lg bg-white shadow-sm">
+        <h2 className="text-xl font-semibold mb-4">Your Recent Records</h2>
+        {records.length === 0 ? (
+          <p className="text-slate-500 text-sm">No records created by you.</p>
+        ) : (
+          <div className="space-y-4">
+            {records.map(rec => (
+              <div key={rec.id} className="p-4 border rounded-md bg-slate-50">
+                <div className="flex justify-between items-start mb-2">
+                  <h3 className="font-semibold">{rec.record_type}</h3>
+                  <span className="text-xs text-slate-400">
+                    {rec.created_at ? new Date(rec.created_at).toLocaleDateString() : "Just now"}
+                  </span>
+                </div>
+                <p className="text-sm text-slate-700 mt-2 mb-3 whitespace-pre-wrap">{rec.description}</p>
+                <div className="flex gap-2">
+                  {rec.patient_id === activePatientId && activePatientId !== null && (
+                    <span className="inline-block text-xs bg-green-100 text-green-700 px-2 py-1 rounded">For Connected Patient</span>
+                  )}
+                  {rec.storage_path && (
+                    <button
+                      onClick={() => handleDownload(rec.id)}
+                      className="inline-block text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded hover:bg-blue-200 transition-colors"
+                    >
+                      Download File
+                    </button>
+                  )}
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-slate-200">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="text-xs text-slate-600">
+                      <span className="font-semibold">MST Status:</span>{" "}
+                      <span className={`px-2 py-0.5 rounded-full font-medium ${
+                        rec.blockchain_status === 'ANCHORED' ? 'bg-green-100 text-green-700' :
+                        rec.blockchain_status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' :
+                        rec.blockchain_status === 'FAILED' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-700'
+                      }`}>
+                        {rec.blockchain_status || 'UNKNOWN'}
+                      </span>
+                      {rec.blockchain_tx_hash && (
+                        <div className="mt-1 font-mono text-[10px] break-all text-slate-500 max-w-[200px] sm:max-w-[300px]">
+                          Tx: {rec.blockchain_tx_hash}
+                        </div>
+                      )}
+                    </div>
+
+                    {rec.blockchain_status === "ANCHORED" && (
+                      <div className="flex items-center gap-2 mt-2 sm:mt-0">
+                         {verifyStatus[rec.id] && (
+                           <span className={`text-xs font-semibold ${
+                             verifyStatus[rec.id].status === 'verified' ? 'text-green-600' :
+                             verifyStatus[rec.id].status === 'mismatch' ? 'text-red-600' : 'text-orange-600'
+                           }`}>
+                             {verifyStatus[rec.id].status === 'verified' ? '✅ Integrity Verified' :
+                              verifyStatus[rec.id].status === 'mismatch' ? '❌ Integrity Mismatch' :
+                              verifyStatus[rec.id].message}
+                           </span>
+                         )}
+                         <button
+                           onClick={() => handleVerify(rec.id)}
+                           disabled={verifying[rec.id]}
+                           className="inline-block text-xs bg-purple-100 text-purple-700 px-3 py-1.5 rounded hover:bg-purple-200 transition-colors disabled:opacity-50 font-medium whitespace-nowrap"
+                         >
+                           {verifying[rec.id] ? "Verifying..." : "Verify on MST"}
+                         </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

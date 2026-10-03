@@ -3,7 +3,6 @@ import uuid
 from typing import Annotated
 from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, Header, status
 from fastapi.responses import StreamingResponse
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from supabase import create_client, Client
 import io
 import json
@@ -14,22 +13,11 @@ router = APIRouter(prefix="/records", tags=["Records"])
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SECRET_KEY = os.getenv("SUPABASE_SECRET_KEY")
-ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
 MST_CONTRACT_ADDRESS = os.getenv("MST_CONTRACT_ADDRESS")
 BLOCKCHAIN_PRIVATE_KEY = os.getenv("BLOCKCHAIN_PRIVATE_KEY")
 
-if not all([SUPABASE_URL, SUPABASE_SECRET_KEY, ENCRYPTION_KEY]):
-    raise RuntimeError("Missing required environment variables for Supabase or Encryption")
-
-# Ensure key is bytes (32 bytes for AES-256)
-try:
-    key_bytes = bytes.fromhex(ENCRYPTION_KEY)
-    if len(key_bytes) != 32:
-        raise ValueError("ENCRYPTION_KEY must be exactly 32 bytes (64 hex characters)")
-except Exception as e:
-    raise RuntimeError(f"Invalid ENCRYPTION_KEY: {str(e)}")
-
-aesgcm = AESGCM(key_bytes)
+if not all([SUPABASE_URL, SUPABASE_SECRET_KEY]):
+    raise RuntimeError("Missing required environment variables for Supabase")
 
 # Initialize MST Blockchain Client
 mst_client = None
@@ -140,33 +128,27 @@ async def upload_medical_file(
     if file.content_type not in allowed_types:
         raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="Unsupported file type")
 
-    # 5. Encrypt file
-    nonce = os.urandom(12)
-    ciphertext = aesgcm.encrypt(nonce, content, None)
-
-    # 6. Upload to private Supabase Storage
+    # 5. Upload to private Supabase Storage
     # Storage path: medical-records/{record_id}/{filename} (filename is randomized or standard)
     ext = file.filename.split(".")[-1] if "." in file.filename else "bin"
     file_name = f"{uuid.uuid4().hex}.{ext}"
     storage_path = f"{record_id}/{file_name}"
 
-    # Supabase storage3 client expects a file path or file-like object in some versions
     import tempfile
     with tempfile.NamedTemporaryFile(delete=False) as tmp:
-        tmp.write(ciphertext)
+        tmp.write(content)
         tmp_path = tmp.name
 
     try:
         res = supabase.storage.from_("medical_records").upload(storage_path, tmp_path, {"content-type": "application/octet-stream"})
         if hasattr(res, "error") and res.error:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to upload encrypted file")
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to upload file")
     finally:
         os.remove(tmp_path)
 
-    # 7. Store metadata in medical_records
+    # 6. Store metadata in medical_records
     update_res = supabase.table("medical_records").update({
-        "storage_path": storage_path,
-        "encryption_iv": nonce.hex()
+        "storage_path": storage_path
     }).eq("id", record_id).execute()
 
     if not update_res.data:
@@ -174,7 +156,7 @@ async def upload_medical_file(
         supabase.storage.from_("medical_records").remove([storage_path])
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update record metadata")
 
-    return {"status": "success", "message": "File encrypted and uploaded successfully"}
+    return {"status": "success", "message": "File uploaded successfully"}
 
 @router.get("/{record_id}/download")
 async def download_medical_file(record_id: str, user = Depends(verify_auth)):
@@ -204,21 +186,12 @@ async def download_medical_file(record_id: str, user = Depends(verify_auth)):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unknown role")
 
     storage_path = record.get("storage_path")
-    nonce_hex = record.get("encryption_iv")
 
-    if not storage_path or not nonce_hex:
+    if not storage_path:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No medical file attached to this record")
 
-    # 3. Download encrypted file from storage
-    # supabase.storage.from_("medical_records").download(storage_path) returns bytes in supabase-py v2
+    # 3. Download file from storage
     file_bytes = supabase.storage.from_("medical_records").download(storage_path)
-
-    # 4. Decrypt file
-    try:
-        nonce = bytes.fromhex(nonce_hex)
-        plaintext = aesgcm.decrypt(nonce, file_bytes, None)
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to decrypt medical file")
 
     # Try to guess mime type from extension
     ext = storage_path.split(".")[-1].lower() if "." in storage_path else ""
@@ -232,8 +205,8 @@ async def download_medical_file(record_id: str, user = Depends(verify_auth)):
     elif ext == "txt":
         mime_type = "text/plain"
 
-    # Return plaintext file
-    return StreamingResponse(io.BytesIO(plaintext), media_type=mime_type, headers={
+    # Return file
+    return StreamingResponse(io.BytesIO(file_bytes), media_type=mime_type, headers={
         "Content-Disposition": f"attachment; filename=\"medical_file_{record_id}.{ext}\""
     })
 
@@ -263,12 +236,12 @@ async def anchor_medical_record(record_id: str, user = Depends(verify_auth)):
     record_hash = None
 
     if storage_path:
-        # File-attached record: hash the exact ciphertext bytes
+        # File-attached record: hash the raw file
         try:
-            ciphertext = supabase.storage.from_("medical_records").download(storage_path)
-            record_hash = "0x" + hashlib.sha256(ciphertext).hexdigest()
+            file_bytes = supabase.storage.from_("medical_records").download(storage_path)
+            record_hash = "0x" + hashlib.sha256(file_bytes).hexdigest()
         except Exception as e:
-            raise HTTPException(status_code=500, detail="Failed to download ciphertext for hashing")
+            raise HTTPException(status_code=500, detail=f"Failed to download file for hashing: {str(e)}")
     else:
         # Text-only record: hash the canonical JSON representation
         description = record.get("description", "")
@@ -284,15 +257,20 @@ async def anchor_medical_record(record_id: str, user = Depends(verify_auth)):
         account = mst_client.signer.account
         contract = w3.eth.contract(address=MST_CONTRACT_ADDRESS, abi=anchor_abi)
 
+        print(f"[ANCHOR] Anchoring record_id='{record_id}' with hash='{record_hash}' to contract {MST_CONTRACT_ADDRESS}")
         tx = contract.functions.anchorRecord(record_id, record_hash).build_transaction({
             'from': account.address,
             'nonce': w3.eth.get_transaction_count(account.address, 'pending'),
             'gas': 2000000,
-            'gasPrice': w3.eth.gas_price
+            'gasPrice': w3.eth.gas_price,
+            'chainId': w3.eth.chain_id
         })
         signed_tx = account.sign_transaction(tx)
         tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
-        w3.eth.wait_for_transaction_receipt(tx_hash)
+        receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+
+        if receipt.status != 1:
+            raise Exception("Blockchain transaction reverted on-chain")
 
         tx_hash_hex = tx_hash.hex()
 
@@ -314,48 +292,69 @@ async def anchor_medical_record(record_id: str, user = Depends(verify_auth)):
 async def verify_medical_record(record_id: str, user = Depends(verify_auth)):
     supabase = get_supabase()
 
+    print(f"[VERIFY] Starting verification for record_id={record_id}")
+
     if not mst_client:
+        print("[VERIFY] ERROR: MST client not configured")
         raise HTTPException(status_code=500, detail="MST client not configured")
 
     record_res = supabase.table("medical_records").select("*").eq("id", record_id).execute()
     if not record_res.data:
+        print(f"[VERIFY] ERROR: Record {record_id} not found in DB")
         raise HTTPException(status_code=404, detail="Record not found")
 
     record = record_res.data[0]
+    print(f"[VERIFY] Record found. blockchain_status={record.get('blockchain_status')}, storage_path={record.get('storage_path')}")
 
     # Must be anchored
     if record.get("blockchain_status") != "ANCHORED":
+        print(f"[VERIFY] Record not anchored. Returning unverified.")
         return {"status": "unverified", "message": "Record is not anchored on MST Testnet"}
 
     storage_path = record.get("storage_path")
     expected_hash = None
 
     if storage_path:
-        # File-attached record
+        # File-attached record: hash the raw file
         try:
-            ciphertext = supabase.storage.from_("medical_records").download(storage_path)
-            expected_hash = "0x" + hashlib.sha256(ciphertext).hexdigest()
+            file_bytes = supabase.storage.from_("medical_records").download(storage_path)
+            expected_hash = "0x" + hashlib.sha256(file_bytes).hexdigest()
+            print(f"[VERIFY] File-based hash computed: {expected_hash}")
         except Exception as e:
-            raise HTTPException(status_code=500, detail="Failed to download ciphertext for verification")
+            print(f"[VERIFY] ERROR downloading file: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to download file for verification: {str(e)}")
     else:
         # Text-only record
         description = record.get("description", "")
         record_type = record.get("record_type", "")
         canonical_json = json.dumps({"description": description, "record_type": record_type}, separators=(',', ':'), ensure_ascii=False)
         expected_hash = "0x" + hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+        print(f"[VERIFY] Text-only record. canonical_json={canonical_json}")
+        print(f"[VERIFY] Text-based hash computed: {expected_hash}")
 
     # Get from blockchain
     try:
         w3 = mst_client.provider.web3
         contract = w3.eth.contract(address=MST_CONTRACT_ADDRESS, abi=anchor_abi)
+        print(f"[VERIFY] Calling getRecordAnchor({record_id}) on contract {MST_CONTRACT_ADDRESS}")
         on_chain_hash = contract.functions.getRecordAnchor(record_id).call()
+        print(f"[VERIFY] On-chain hash returned: '{on_chain_hash}'")
 
         if not on_chain_hash:
+            print("[VERIFY] On-chain hash is empty/falsy. Returning unverified.")
             return {"status": "unverified", "message": "Record not found on blockchain"}
 
+        print(f"[VERIFY] Comparing on_chain='{on_chain_hash.lower()}' vs expected='{expected_hash.lower()}'")
         if on_chain_hash.lower() == expected_hash.lower():
+            print("[VERIFY] MATCH! Returning verified.")
             return {"status": "verified", "message": "Integrity Verified", "tx_hash": record.get("blockchain_tx_hash")}
         else:
+            print(f"[VERIFY] MISMATCH! on_chain='{on_chain_hash}' expected='{expected_hash}'")
             return {"status": "mismatch", "message": "Integrity Mismatch: Data has been altered!"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to verify on blockchain: {str(e)}")
+        error_msg = str(e)
+        print(f"[VERIFY] Exception during blockchain call: {error_msg}")
+        if "contract deployed correctly" in error_msg or "execution reverted" in error_msg.lower():
+            return {"status": "unverified", "message": "Not found on this contract (likely older version)"}
+        raise HTTPException(status_code=500, detail=f"Failed to verify on blockchain: {error_msg}")
+

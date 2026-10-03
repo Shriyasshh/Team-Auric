@@ -12,8 +12,8 @@ MediVault is a privacy-first, cryptographic medical record management platform. 
 
 * **Patient-Controlled QR Care Sessions:** Doctors cannot search or browse for patients. A patient must generate a one-time, 5-minute expiring QR code. When the doctor scans it, it initiates a secure, 2-hour "Care Session" enforced strictly by Database Row Level Security (RLS).
 * **Zero-Knowledge Encryption:** Medical files are encrypted at rest using AES-256-GCM before they ever hit the database storage.
-* **MST Blockchain Notary:** Medical data is **never** stored on the blockchain. Instead, a cryptographic SHA-256 hash of the encrypted file is anchored to the MST Testnet.
-* **1-Click Integrity Verification:** Anyone can click "Verify on MST" in the dashboard. The system will re-hash the file, check the immutable blockchain record, and verify the record has not been tampered with.
+* **MST Blockchain Notary:** Medical data is **never** stored on the blockchain. Instead, a cryptographic SHA-256 hash of the **raw, unencrypted file** is anchored directly to the MST Testnet, bypassing the app's encryption layer for the integrity proof.
+* **1-Click Integrity Verification:** Anyone can click "Verify on MST" in the dashboard. The system will decrypt the file, re-hash the raw data, check the immutable blockchain record, and verify the record has not been tampered with.
 
 ---
 
@@ -21,7 +21,7 @@ MediVault is a privacy-first, cryptographic medical record management platform. 
 
 The blockchain acts as an immutable notary for medical records.
 
-1. **Encrypt & Hash:** When a doctor saves a record, the backend encrypts it and generates a SHA-256 hash of the ciphertext.
+1. **Hash & Encrypt:** When a doctor saves a record, the backend generates a SHA-256 hash of the **raw plaintext file**. It then encrypts the file (AES-256-GCM) for private storage.
 2. **Anchor:** This hash, along with the record's UUID, is submitted to the `MediVaultAnchor` smart contract on the MST Testnet.
 3. **Idempotency Guard:** The smart contract ensures a record can only be anchored once, preventing tampering or overwriting of the original hash.
 4. **Transparency:** Every anchored record provides a transaction hash that can be viewed on [MSTScan](https://mstscan.com).
@@ -30,6 +30,17 @@ The blockchain acts as an immutable notary for medical records.
 * **Network:** MST Testnet
 * **Contract Address:** `0x69b17e933F6531E64eC270959EB6ea47B29400fE`
 * **Verified Transactions:** Viewable directly in the Patient and Doctor dashboards.
+
+### 🔗 MST Developer Resources
+* **BridgeKey Wallet Extension:** [Chrome Web Store](https://chromewebstore.google.com/detail/bridgekey/bfjojdcfenehemjgjlepdjomkpginlkg)
+* **Faucet – Claim $MSTC Tokens:** [faucet.masterstroke.academy](https://faucet.masterstroke.academy)
+* **TypeScript SDK:** [@mstblockchain/mst-sdk](https://www.npmjs.com/package/@mstblockchain/mst-sdk)
+* **Python SDK:** [mst-sdk-python](https://pypi.org/project/mst-sdk-python/)
+* **VibeKit SDK:** [@mstblockchain/mst-vibe-kit](https://www.npmjs.com/package/@mstblockchain/mst-vibe-kit)
+* **MCP Endpoint:** [mcp.mstblockchain.com/sse](https://mcp.mstblockchain.com/sse)
+* **Official Documentation:** [docs.mstblockchain.com](https://docs.mstblockchain.com)
+* **MSTScan Explorer:** [mstscan.com](https://mstscan.com)
+* **BridgeKey Website:** [bridgekey.io](https://bridgekey.io)
 
 ---
 
